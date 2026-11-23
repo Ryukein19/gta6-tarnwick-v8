@@ -1,24 +1,40 @@
-// A working gta6-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in. It copies game/ and
-// screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the
-// judge reads, with the vendored make.fun library. Only the plumbing, not an open world: Block
-// Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
-// title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
-// your own open-world crime game in its place (three.js or any library you vendor under game/),
-// put your 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
+// Tarnwick v8 — "Come Home", golden-hour restage (Node 22, standard library only): the game is
+// this directory's game/ folder, plain static files a desktop browser loads offline
+// (game/index.html and its ES modules, no library and no network request), and the program hands
+// it in. It copies game/ and screenshots/ from beside this file to /output and writes
+// /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
+// The game: Renn Kovacs comes home after six years to a faded resort town — his brother Tam is
+// dead, the Kovac Garage is about to be seized, and the fixer who welcomed him home set up the
+// run that killed him. 8 story jobs in a 5-act arc across 6 districts, Tarnwick PD dispatch
+// (patrol cruisers, roadblocks, a helicopter with a searchlight), a crew with ability cards, a
+// HUD with minimap and mission timer, and radio stations WAVE 97.9, HARBOUR 101.2 and
+// TARNWICK TALK 1210. Golden-hour chase cover, Lantern Mile night market on foot, pause menu
+// with map and career stats, title screen with 3 save slots. Put 3 or 4 PNG or JPEG screenshots
+// in screenshots/ (the first by name is the cover) and run it.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
+// Tarnwick v8 pre-flight: the scorer refuses an entry with more than 4 screenshots or any
+// screenshot over 256 KiB, so fail loudly here instead of shipping a doomed dossier.
+const shotsDir = join(here, 'screenshots');
+if (!existsSync(shotsDir)) throw new Error('Tarnwick v8: screenshots/ is missing — the cover and 3 shots are required.');
+const shots = readdirSync(shotsDir).filter((f) => statSync(join(shotsDir, f)).isFile());
+if (shots.length === 0) throw new Error('Tarnwick v8: screenshots/ is empty — the cover and 3 shots are required.');
+if (shots.length > 4) throw new Error(`Tarnwick v8: ${shots.length} screenshots, scorer cap is 4.`);
+for (const f of shots) {
+  const size = statSync(join(shotsDir, f)).size;
+  if (size > 262144) throw new Error(`Tarnwick v8: screenshot ${f} is ${size} bytes, scorer cap is 262144 (256 KiB).`);
+}
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
