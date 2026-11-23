@@ -1,65 +1,95 @@
-// Dialogue: the lines that advance the story, and the portraits that carry them.
-// Every portrait is a coloured disc with initials — distinct faces, not grey boxes —
-// so the judge can tell the crew apart at contact-sheet size.
+// Dialogue: named characters with roles and a line that advances the story.
+// A portrait is a coloured circle with initials — distinct per character, never
+// a grey box.
 
-import { FONT } from './config.js';
-
-/** A portrait disc: coloured ring, coloured face, initials. */
-export function drawPortrait(ctx, x, y, r, colour, initials, label) {
-  ctx.fillStyle = colour;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
+/** Draw a dialogue box: portrait + name + role + line, bottom-centre. */
+export function drawDialogue(ctx, x, y, w, d, font) {
+  const pad = 14;
+  const portraitR = 26;
+  const boxH = 86;
+  ctx.save();
+  ctx.fillStyle = 'rgba(16, 14, 20, 0.88)';
+  ctx.strokeStyle = '#c9a86a';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, w, boxH, 8);
   ctx.fill();
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.stroke();
+  // Portrait.
+  const cx = x + pad + portraitR;
+  const cy = y + boxH / 2;
+  ctx.fillStyle = d.color;
   ctx.beginPath();
-  ctx.arc(x, y + r * 0.55, r * 0.62, Math.PI, 0);
+  ctx.arc(cx, cy, portraitR, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#f7f2e8';
-  ctx.font = `bold ${Math.max(10, r * 0.72)}px ${FONT}`;
+  ctx.fillStyle = '#f4ede2';
+  ctx.font = `bold 20px ${font}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(initials, x, y - r * 0.08);
-  if (label) {
-    ctx.fillStyle = '#f7f2e8';
-    ctx.font = `bold ${Math.max(9, r * 0.32)}px ${FONT}`;
-    ctx.textAlign = 'left';
-    ctx.fillText(label, x + r + 8, y);
-  }
-}
-
-/** The dialogue box: portrait + name + role + one line that moves the story. */
-export function drawDialogue(ctx, x, y, w, who, role, line, colour, initials) {
-  const h = 86;
-  ctx.fillStyle = 'rgba(23, 18, 14, 0.88)';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = '#3a2c22';
-  ctx.fillRect(x, y, 4, h);
-  drawPortrait(ctx, x + 44, y + 43, 28, colour, initials);
-  ctx.fillStyle = '#f7f2e8';
-  ctx.font = `bold 17px ${FONT}`;
+  ctx.fillText(d.initials, cx, cy + 1);
+  // Name + role. Measure the name while its font is still set, or the role
+  // starts on top of the name's tail.
+  const tx = x + pad + portraitR * 2 + 12;
+  ctx.fillStyle = '#f2c94c';
+  ctx.font = `bold 17px ${font}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(who, x + 84, y + 30);
-  ctx.fillStyle = '#f2c94c';
-  ctx.font = `12px ${FONT}`;
-  ctx.fillText(role, x + 84, y + 48);
-  ctx.fillStyle = '#f7f2e8';
-  ctx.font = `italic 15px ${FONT}`;
-  ctx.fillText(line, x + 84, y + 70);
+  ctx.fillText(d.name, tx, y + 28);
+  const nameW = ctx.measureText(d.name).width;
+  ctx.fillStyle = '#cbbfa8';
+  ctx.font = `13px ${font}`;
+  ctx.fillText(d.role, tx + nameW + 10, y + 28);
+  // Line (wrapped to two lines max).
+  ctx.fillStyle = '#f4ede2';
+  ctx.font = `16px ${font}`;
+  const maxW = w - (tx - x) - pad;
+  const words = d.line.split(' ');
+  let line = '';
+  let lineY = y + 56;
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, tx, lineY);
+      line = word;
+      lineY += 20;
+      if (lineY > y + 74) break;
+    } else {
+      line = test;
+    }
+  }
+  if (line && lineY <= y + 74) ctx.fillText(line, tx, lineY);
+  ctx.restore();
 }
 
-/** The lines, keyed by mission id. */
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/** The mission dialogue lines (speaker, role, line). */
 export const LINES = {
-  1: { who: 'SENA KOVAC', role: 'sister · runs the Kovac Garage', line: 'Six years, Renn. Tam’s car still runs. You do too.', colour: '#f2c94c', initials: 'SK' },
-  2: { who: 'MAREN VOSS', role: 'repo queen · chop shop', line: 'The list is yours. Don’t let GREYLINE see you take it.', colour: '#e88bb0', initials: 'MV' },
-  3: { who: 'MAMA ODELLE', role: 'market matriarch', line: 'Two stalls paid, three to go. The lanterns stay lit, child.', colour: '#f2a56b', initials: 'MO' },
-  4: { who: 'UNCLE BRAM', role: 'fixer · runs the Strand', line: 'Take the courier van. Quietly. GREYLINE counts its vans.', colour: '#4fc3f7', initials: 'UB' },
-  5: { who: 'DAX ROOK', role: 'turf captain', line: 'Roadblock on the Strand. Thread it — don’t stop for it.', colour: '#7ac74f', initials: 'DR' },
-  6: { who: 'ILYA VANE', role: 'GREYLINE lieutenant', line: 'Dray’s sedan is on the boulevard at sunset. Wreck it — make him walk home.', colour: '#e5534b', initials: 'IV' },
-  7: { who: 'SENA KOVAC', role: 'sister · runs the Kovac Garage', line: 'The boat goes down tonight, Renn. For Tam.', colour: '#f2c94c', initials: 'SK' },
-  8: { who: 'UNCLE BRAM', role: 'fixer · runs the Strand', line: 'Dray is waiting on the Strand. End it where it started.', colour: '#4fc3f7', initials: 'UB' },
+  ilya: {
+    initials: 'IV', name: 'ILYA VANE', role: 'GREYLINE lieutenant', color: '#e5534b',
+    line: 'Dray\'s sedan is on the boulevard at sunset. Wreck it — make him walk home.',
+  },
+  odelle: {
+    initials: 'MO', name: 'MAMA ODELLE', role: 'market matriarch', color: '#f2c94c',
+    line: 'Two stalls paid, three to go, Renn. The Mile remembers who collects.',
+  },
+  sena: {
+    initials: 'SK', name: 'SENA KOVAC', role: 'runs the Kovac Garage', color: '#f2c94c',
+    line: 'Tam\'s car is yours now. Bring it home in one piece — mostly.',
+  },
+  bram: {
+    initials: 'UB', name: 'UNCLE BRAM', role: 'fixer · runs the Strand', color: '#6fb7d9',
+    line: 'Dray owns the harbour, not the Strand. Keep it that way.',
+  },
 };
-
-export function lineFor(missionId) {
-  return LINES[missionId] ?? LINES[6];
-}

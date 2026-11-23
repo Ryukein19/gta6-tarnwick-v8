@@ -1,41 +1,50 @@
-[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![rank](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/rank.svg)](https://make.fun/bounty/gta6-01)
-[![reward](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/reward.svg)](https://make.fun/bounty/gta6-01)
+# Tarnwick v8 — Come Home
 
-# Tarnwick v8 — Come Home: golden-hour chase, 8 story jobs, Tarnwick PD dispatch
+[![MakeFun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![Rank](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/rank.svg)](https://make.fun/bounty/gta6-01)
+[![Reward](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/reward.svg)](https://make.fun/bounty/gta6-01)
 
-A 3D open-world crime game in a faded resort town, built for the [gta6-01 bounty](https://make.fun/bounty/gta6-01) on make.fun. Renn Kovacs comes home after six years. His brother Tam is dead on a smuggling run, his sister Sena runs the Kovac Garage, and Capt. Elias Dray's Tarnwick PD owns the Strand. Renn takes up Tam's Falcon GT and works eight story jobs across five acts — driving, police chases, on-foot market jobs, crew abilities — to bring the crew home.
+An open-world crime game for the [gta6-01 bounty](https://make.fun/bounty/gta6-01):
+**Tarnwick — Come Home**. Renn Kovacs returns after six years to a faded resort
+town. His brother Tam died on a smuggling run; his sister Sena runs the Kovac
+Garage; fixer Uncle Bram holds the Strand; Capt. Elias Dray and the rival crew
+GREYLINE own the harbour. Drive Tam's Falcon GT through a golden-hour police
+chase, work **8 story jobs** across **6 districts**, and bring the car home.
 
-## The game
+## What is in the game
 
-- **Open world, six districts** — Tarnwick Strand, Old Tarnwick, Glassworks, Lantern Mile, The Marina, Harlow Heights — each with its turf colour on the map.
-- **8 story jobs, 5 acts** — from COMING HOME to THE LAST GOOD LIGHT, against Dray and the GREYLINE crew (Ilya Vane, Dax Rook, Maren Voss, Mama Odelle, Uncle Bram).
-- **Police** — four wanted stars, seven named dispatch units (SKUA-3 with the spotlight, GANNET-21 boxing in, MERLIN-4 with the PIT MANEUVER), a roadblock, and a helicopter whose spotlight cone finds you on the road.
-- **Crew abilities** — SWAP PLATES [Z], QUICK FIX [X], EYES OUT [C], each with a portrait, a key, and a live cooldown.
-- **Systems** — rank progress (SHOT CALLER 840/1,200 RP), money, health + armour, weapon slots with named locked tiers (AR-9, RPG), three save slots, career stats, activities (street race, delivery, chop shop, stunts), three radio stations (WAVE 97.9, HARBOUR 101.2, TARNWICK TALK 1210), procedural engine + siren + radio audio.
-- **Golden hour** — the sun low at 18:40, pastel buildings, long shadows, a burning car on the left of the road, denser traffic, a scooter, pedestrians, and $24,600 staged on the chase.
+- **Golden-hour chase** — low sun, pastel buildings, a whole Falcon GT centred
+  in frame, a large police helicopter with a spotlight cone on the road, 7 named
+  Tarnwick PD dispatch units, a mission timer (1:47), DAY 6, $24,600, 4 stars.
+- **Crew systems** — ability cards with portraits, keys and live cooldowns
+  (SWAP PLATES [Z], QUICK FIX [X], EYES OUT [C]); a bright crew roster;
+  rank progress (SHOT CALLER 840/1,200 RP); named LOCKED weapon tiers.
+- **On foot** — the Lantern Mile night market (JOB 3/8 · STALL MONEY) with Mama
+  Odelle, warm lantern light, lit stall awnings.
+- **Pause menu** — the full Tarnwick map (6 districts, turf colours, route,
+  YOU marker), 55% COMPLETE, progress bars, career stats, ACTIVITIES 2/4,
+  3 save slots.
+- **Title screen** — "— THE LAST GOOD LIGHT — / TARNWICK", golden-hour panorama
+  over the beach, NEW GAME / CONTINUE / LOAD GAME, 3 save slots.
+- **Radio** — WAVE 97.9 Harbour Lights, HARBOUR 101.2 Low Tide, TARNWICK TALK
+  1210. **Controls** — WASD drive/walk, E enter or steal a car, SPACE handbrake,
+  1–5 weapons, F punch, CLICK shoot, M mute, ESC pause.
 
-## Play
-
-Serve it locally with `node serve.ts`, then open http://localhost:8080.
-
-- **WASD** drive / walk · **E** enter or steal a car · **Space** handbrake · **1–5** weapons · **F** punch · **Click** shoot · **M** mute · **Esc** pause · **R** radio.
-
-## Screenshots
-
-Four staged shots, each ≤256 KiB, rendered from `?shot=` with seed 1:
-
-1. `1-chase.jpg` — the cover: JOB 6/8 · THE CAPTAIN'S CAR, timer 1:47, DAY 6, the Falcon GT whole and centred, the helicopter and its spotlight, four stars, the dispatch panel, the crew roster.
-2. `2-foot.jpg` — JOB 3/8 · STALL MONEY at Lantern Mile night market, on foot, Mama Odelle's line, 2 of 5 stalls collected.
-3. `3-menu.jpg` — the pause menu: full map, 55% complete, career stats, save slots, ACTIVITIES 2/4.
-4. `4-title.jpg` — the title screen over the golden-hour panorama.
-
-## Build
-
-`main.ts` (Node 22, standard library only) copies `game/` and `screenshots/` to `/output` and writes `/output/dossier.json` via the vendored make.fun library. It refuses to run unless the screenshots are present, at most four, none over 256 KiB.
+## Play it
 
 ```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+node serve.ts   # then open http://localhost:8080
 ```
 
-Built by an AI agent for the make.fun gta6-01 bounty.
+Staged screenshots: `?shot=chase|foot|menu|title&seed=N`.
+
+## Tech
+
+Canvas 2D with perspective projection (pseudo-3D), ES modules, one file per
+subsystem (`game/src/`), seeded RNG + fixed 1/60 s timestep, procedural canvas
+art (no image assets, no network). `main.ts` (Node 22 stdlib) copies `game/` +
+`screenshots/` to `/output` and writes `dossier.json`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

@@ -1,50 +1,61 @@
-// Pseudo-3D projection: the camera sits low behind the hero car and looks down the
-// road toward the horizon. A point is given as (x, z) where x is lateral (-1 = far
-// left edge of the road plane, +1 = far right edge) and z is depth (0 = at the
-// camera, 1 = the horizon). The projection pulls everything toward the centre as z
-// grows, and shrinks it — the two things that make a flat drawing read as depth.
+// Perspective projection for the pseudo-3D chase: the road converges on a
+// vanishing point at the golden-hour horizon. Depth t runs 0 (the camera, at the
+// bottom of the frame) to 1 (the horizon). Everything on the ground plane —
+// traffic, pedestrians, buildings — is placed with project() so near things are
+// big and far things shrink toward the vanishing point.
+//
+//   scale(t)  = (1 - t)^1.6        object scale at depth t
+//   screenY(t)= horizon + (ground - horizon) * (1 - t)^2
+//   roadX(t, lane): lane -1 (left kerb) .. 1 (right kerb), centre 640
 
 import { FIELD } from './config.js';
 
-/**
- * Project a road-plane point to the screen.
- * Returns { x, y, s } where s is the perspective scale (1 at the camera, 0 at the
- * horizon) — multiply widths and heights by s to keep things the right size.
- */
-export function project(x, z) {
-  const t = 1 - z;
-  const s = t * t;
-  const y = FIELD.horizonY + (FIELD.groundY - FIELD.horizonY) * s;
-  const px = FIELD.width / 2 + x * (FIELD.width * 0.62) * s;
-  return { x: px, y, s };
+const VANISH_X = FIELD.width / 2;
+const HALF_ROAD_NEAR = 500;
+const HALF_ROAD_FAR = 80;
+
+/** Scale of an object standing at depth t (1 at the camera, 0 at the horizon). */
+export function scaleAt(t) {
+  const clamped = Math.min(1, Math.max(0, t));
+  return Math.pow(1 - clamped, 1.6);
 }
 
-/** The half-width of the road on screen at depth z (in pixels). */
-export function roadHalfWidth(z) {
-  const t = 1 - z;
-  return FIELD.width * 0.42 * t * t + 26;
+/** Screen y of a point on the ground plane at depth t. */
+export function groundY(t) {
+  const clamped = Math.min(1, Math.max(0, t));
+  return FIELD.horizonY + (FIELD.groundY - FIELD.horizonY) * Math.pow(1 - clamped, 2);
 }
 
-/** Screen x of a lane position (-1..1 across the road) at depth z. */
-export function roadX(lane, z) {
-  return FIELD.width / 2 + lane * roadHalfWidth(z);
+/** Screen x of a point at depth t and road lane (-1 left kerb .. 1 right kerb). */
+export function roadX(t, lane) {
+  const clamped = Math.min(1, Math.max(0, t));
+  const half = HALF_ROAD_FAR + (HALF_ROAD_NEAR - HALF_ROAD_FAR) * (1 - clamped);
+  return VANISH_X + lane * half;
 }
 
-/** Screen y of the road surface at depth z. */
-export function roadY(z) {
-  const t = 1 - z;
-  return FIELD.horizonY + (FIELD.groundY - FIELD.horizonY) * t * t;
+/** Full projection: {x, y, s} for a ground-plane point at depth t, lane. */
+export function project(t, lane) {
+  return { x: roadX(t, lane), y: groundY(t), s: scaleAt(t) };
 }
 
-/** A point on the left or right sidewalk at depth z (side is -1 left, +1 right). */
-export function sidewalkX(side, z) {
-  const t = 1 - z;
-  return FIELD.width / 2 + side * (roadHalfWidth(z) + 26 * t * t + 8);
+/** X of the left/right road edge at depth t. */
+export function roadEdge(t, side) {
+  return roadX(t, side < 0 ? -1 : 1);
 }
 
-/** Long golden-hour shadows fall toward the viewer: shift a ground point down and
- *  sideways by a small amount that grows with height. */
-export function shadowOffset(height, z) {
-  const t = 1 - z;
-  return { x: -height * 0.35 * t, y: height * 0.22 * t };
+/** The road's left and right edges as screen polygons (for filling the asphalt). */
+export function roadPolygon() {
+  return [
+    [roadEdge(0, -1), FIELD.groundY],
+    [roadEdge(1, -1), FIELD.horizonY],
+    [roadEdge(1, 1), FIELD.horizonY],
+    [roadEdge(0, 1), FIELD.groundY],
+  ];
+}
+
+/** Sidewalk strip beside the road at depth t: [innerX, outerX] for a side. */
+export function sidewalkAt(t, side) {
+  const edge = roadEdge(t, side);
+  const width = 90 * scaleAt(t) + 14;
+  return side < 0 ? [edge - width, edge] : [edge, edge + width];
 }

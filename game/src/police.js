@@ -1,130 +1,84 @@
-// The police: the helicopter with its dominant spotlight cone, the seven named
-// dispatch units, and the roadblock ahead. The helicopter is the chase's proof of
-// escalation — in v8 it is large, top-centre, and its cone visibly hits the road.
+// Tarnwick PD in the air and on the road: the police helicopter with its
+// spotlight cone, the flanking cruisers, and the dispatch roster. The helicopter
+// is the chase's proof of escalation — in v8 it is large, top-centre, and its
+// cone visibly hits the road ahead of the hero car.
 
-import { FIELD, PALETTE } from './config.js';
-
-/** The helicopter: body, tail, skids, a blurred rotor, and a searchlight. */
-export function drawHelicopter(ctx, x, y, span, time) {
+/** Draw the helicopter: body, tail, spinning rotor, searchlight cone. */
+export function drawHeli(ctx, x, y, span, rotorAngle, coneTarget) {
   const bodyW = span * 0.42;
   const bodyH = span * 0.16;
-  // Rotor blur: a translucent disc above the body.
-  ctx.fillStyle = 'rgba(30, 28, 34, 0.25)';
-  ctx.beginPath();
-  ctx.ellipse(x, y - bodyH * 0.9, span / 2, span * 0.05, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Rotor blades, spinning (two positions alternating).
-  ctx.strokeStyle = '#1a1a22';
-  ctx.lineWidth = Math.max(2, span * 0.012);
-  const a = time * 9;
-  ctx.beginPath();
-  ctx.moveTo(x - Math.cos(a) * span * 0.48, y - bodyH * 0.9 - Math.sin(a) * span * 0.03);
-  ctx.lineTo(x + Math.cos(a) * span * 0.48, y - bodyH * 0.9 + Math.sin(a) * span * 0.03);
-  ctx.stroke();
-  // Tail boom.
-  ctx.fillStyle = '#23232e';
-  ctx.fillRect(x + bodyW * 0.4, y - bodyH * 0.32, bodyW * 0.62, bodyH * 0.3);
-  // Tail rotor.
-  ctx.strokeStyle = '#1a1a22';
-  ctx.lineWidth = Math.max(1.5, span * 0.008);
-  ctx.beginPath();
-  ctx.moveTo(x + bodyW * 0.95, y - bodyH * 0.55);
-  ctx.lineTo(x + bodyW * 0.95, y + bodyH * 0.1);
-  ctx.stroke();
-  // Body.
-  ctx.fillStyle = '#2e2e3a';
-  ctx.beginPath();
-  ctx.moveTo(x - bodyW / 2, y);
-  ctx.lineTo(x - bodyW * 0.42, y - bodyH * 0.7);
-  ctx.lineTo(x + bodyW * 0.32, y - bodyH * 0.7);
-  ctx.lineTo(x + bodyW / 2, y - bodyH * 0.2);
-  ctx.lineTo(x + bodyW * 0.42, y);
-  ctx.closePath();
-  ctx.fill();
-  // Cockpit glass, catching the sun.
-  ctx.fillStyle = '#9fd8ef';
-  ctx.beginPath();
-  ctx.moveTo(x - bodyW * 0.34, y - bodyH * 0.62);
-  ctx.lineTo(x + bodyW * 0.1, y - bodyH * 0.62);
-  ctx.lineTo(x + bodyW * 0.3, y - bodyH * 0.28);
-  ctx.lineTo(x - bodyW * 0.36, y - bodyH * 0.28);
-  ctx.closePath();
-  ctx.fill();
-  // "TARNWICK PD" on the side.
-  ctx.fillStyle = '#f7f2e8';
-  ctx.font = `bold ${Math.max(9, span * 0.045)}px ${'system-ui, sans-serif'}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('TARNWICK PD', x - bodyW * 0.02, y - bodyH * 0.08);
-  // Searchlight housing under the nose.
-  ctx.fillStyle = '#ffd98a';
-  ctx.beginPath();
-  ctx.arc(x - bodyW * 0.18, y + bodyH * 0.12, Math.max(3, span * 0.02), 0, Math.PI * 2);
-  ctx.fill();
-  // Skids.
-  ctx.strokeStyle = '#1a1a22';
-  ctx.lineWidth = Math.max(2, span * 0.01);
-  ctx.beginPath();
-  ctx.moveTo(x - bodyW * 0.34, y + bodyH * 0.32);
-  ctx.lineTo(x + bodyW * 0.36, y + bodyH * 0.32);
-  ctx.stroke();
-}
-
-/**
- * The spotlight cone: a wide translucent beam from the helicopter down to a bright
- * pool on the road ahead of the hero car. (hx, hy) is the helicopter, (tx, ty) the
- * pool centre on the road, width the pool's width.
- */
-export function drawSpotlight(ctx, hx, hy, tx, ty, width, time) {
-  const flicker = 0.82 + 0.08 * Math.sin(time * 7) + 0.05 * Math.sin(time * 13);
-  const grad = ctx.createLinearGradient(hx, hy, tx, ty);
-  grad.addColorStop(0, `rgba(255, 244, 200, ${0.55 * flicker})`);
-  grad.addColorStop(1, `rgba(255, 244, 200, ${0.22 * flicker})`);
+  ctx.save();
+  // Spotlight cone: from the heli down to the road ahead (translucent gold).
+  const grad = ctx.createLinearGradient(x, y + bodyH, coneTarget.x, coneTarget.y);
+  grad.addColorStop(0, 'rgba(255, 230, 150, 0.5)');
+  grad.addColorStop(1, 'rgba(255, 230, 150, 0.05)');
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(hx - 8, hy + 6);
-  ctx.lineTo(tx - width / 2, ty);
-  ctx.lineTo(tx + width / 2, ty);
-  ctx.lineTo(hx + 8, hy + 6);
+  ctx.moveTo(x - span * 0.06, y + bodyH * 0.6);
+  ctx.lineTo(x + span * 0.06, y + bodyH * 0.6);
+  ctx.lineTo(coneTarget.x + span * 0.16, coneTarget.y);
+  ctx.lineTo(coneTarget.x - span * 0.16, coneTarget.y);
   ctx.closePath();
   ctx.fill();
-  // The pool of light on the road.
-  ctx.fillStyle = `rgba(255, 244, 200, ${0.45 * flicker})`;
+  // Light pool where the cone lands.
+  ctx.fillStyle = 'rgba(255, 230, 150, 0.28)';
   ctx.beginPath();
-  ctx.ellipse(tx, ty, width / 2, width * 0.12, 0, 0, Math.PI * 2);
+  ctx.ellipse(coneTarget.x, coneTarget.y, span * 0.17, span * 0.05, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Dust and heat shimmer in the beam.
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.12 * flicker})`;
-  for (let i = 0; i < 5; i += 1) {
-    const t = ((time * 0.12 + i * 0.2) % 1);
-    const px = hx + (tx - hx) * t + Math.sin(time * 3 + i * 2) * 14;
-    const py = hy + (ty - hy) * t;
-    ctx.beginPath();
-    ctx.arc(px, py, 2 + t * 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/** A roadblock ahead: two cruisers nose-to-nose across the road plus a striped barrier. */
-export function drawRoadblock(ctx, x, y, w, time) {
-  const h = w * 0.16;
-  // Barrier stripes.
-  ctx.fillStyle = '#f7f2e8';
-  ctx.fillRect(x - w / 2, y - h, w, h * 0.32);
-  ctx.fillStyle = '#e5534b';
-  for (let i = 0; i < 6; i += 1) {
-    ctx.fillRect(x - w / 2 + (i * w) / 6, y - h, w / 12, h * 0.32);
-  }
-  // Flashing beacons on the barrier.
-  const on = Math.floor(time * 2.5) % 2 === 0;
-  ctx.fillStyle = on ? '#ff2e2e' : '#2e7bff';
+  // Tail boom + fin.
+  ctx.fillStyle = '#1c2733';
+  ctx.fillRect(x + bodyW * 0.4, y - bodyH * 0.28, span * 0.3, bodyH * 0.28);
   ctx.beginPath();
-  ctx.arc(x - w * 0.3, y - h - 8, 6, 0, Math.PI * 2);
-  ctx.arc(x + w * 0.3, y - h - 8, 6, 0, Math.PI * 2);
+  ctx.moveTo(x + bodyW * 0.4 + span * 0.3, y - bodyH * 0.28);
+  ctx.lineTo(x + bodyW * 0.4 + span * 0.3, y - bodyH * 0.9);
+  ctx.lineTo(x + bodyW * 0.4 + span * 0.24, y - bodyH * 0.28);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = PALETTE.gold;
-  ctx.font = `bold ${Math.max(10, w * 0.05)}px ${'system-ui, sans-serif'}`;
+  // Body.
+  ctx.fillStyle = '#22303e';
+  ctx.beginPath();
+  ctx.ellipse(x, y, bodyW * 0.5, bodyH * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Canopy.
+  ctx.fillStyle = '#9fc4d9';
+  ctx.beginPath();
+  ctx.ellipse(x - bodyW * 0.18, y - bodyH * 0.12, bodyW * 0.2, bodyH * 0.26, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  // Skids.
+  ctx.strokeStyle = '#10161d';
+  ctx.lineWidth = Math.max(2, span * 0.012);
+  ctx.beginPath();
+  ctx.moveTo(x - bodyW * 0.34, y + bodyH * 0.62);
+  ctx.lineTo(x + bodyW * 0.34, y + bodyH * 0.62);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - bodyW * 0.24, y + bodyH * 0.42);
+  ctx.lineTo(x - bodyW * 0.3, y + bodyH * 0.62);
+  ctx.moveTo(x + bodyW * 0.24, y + bodyH * 0.42);
+  ctx.lineTo(x + bodyW * 0.3, y + bodyH * 0.62);
+  ctx.stroke();
+  // Rotor: two blades spinning (drawn as a blurred disc + blade line).
+  ctx.fillStyle = 'rgba(220, 230, 240, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(x, y - bodyH * 0.85, span * 0.5, span * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20, 24, 30, 0.85)';
+  ctx.lineWidth = Math.max(2, span * 0.014);
+  const a = rotorAngle % Math.PI;
+  ctx.beginPath();
+  ctx.moveTo(x - Math.cos(a) * span * 0.5, y - bodyH * 0.85 - Math.sin(a) * span * 0.05);
+  ctx.lineTo(x + Math.cos(a) * span * 0.5, y - bodyH * 0.85 + Math.sin(a) * span * 0.05);
+  ctx.stroke();
+  // "POLICE" marking.
+  ctx.fillStyle = '#f4ede2';
+  ctx.font = `bold ${Math.max(9, span * 0.05)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('ROADBLOCK — TARNWICK PD', x, y - h * 1.7);
+  ctx.fillText('POLICE', x + bodyW * 0.05, y + bodyH * 0.08);
+  ctx.restore();
+}
+
+/** A police cruiser flanking the player (same car drawing, police livery). */
+export function cruiserColor() {
+  return '#22303e';
 }

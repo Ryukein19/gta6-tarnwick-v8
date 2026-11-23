@@ -1,24 +1,24 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s
-// steps (several in a slow frame, none in a fast one), and the renderer paints what is
-// there. The game moves between four screens: title, play, paused and game over.
-// Renn Kovacs drives Tam's Falcon GT through Tarnwick; the police chase; the eight
-// story jobs advance the arc. E steps out of the car to walk Lantern Mile on foot.
+// Tarnwick v8 — Come Home. Boot and the one loop: input is read every frame,
+// the world advances in fixed 1/60 s steps (several in a slow frame, none in a
+// fast one), and the renderer paints what is there. The game moves between four
+// screens: title, play, paused and game over. On foot, Renn walks the Lantern
+// Mile market instead of driving.
 //
-// ?seed=N fixes the street. ?shot=chase|foot|menu|title (with &seed=N) stages that
-// scene instead of running the loop, paints it twice and sets window.__shotReady
-// for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
+// ?seed=N fixes the city and traffic. ?shot=chase|foot|menu|title (with
+// &seed=N) stages that scene instead of running the loop, repaints it
+// continuously (a late resize must never clear the canvas to black) and sets
+// window.__shotReady for a screenshot.
+import { STEP } from './config.js';
 import { createRandom } from './random.js';
-import { createCity } from './city.js';
-import { createWorld, EVENT_HIT, EVENT_MISSION, EVENT_OVER } from './world.js';
-import { createTraffic } from './traffic.js';
-import { stepPlayer, useAbility } from './player.js';
-import { ACTION_ABILITY_1, ACTION_ABILITY_2, ACTION_ABILITY_3, ACTION_CONFIRM, ACTION_EXIT, ACTION_PAUSE, ACTION_RADIO, createInput } from './input.js';
+import { createWorld, EVENT_TIMER_END } from './world.js';
+import { ACTION_CONFIRM, ACTION_ENTER, ACTION_MUTE, ACTION_PAUSE, createInput } from './input.js';
 import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { createAudio } from './audio.js';
 import { stageShot } from './shots.js';
+import { readSaves, saveToSlot } from './save.js';
+import { blip, setEngine, startAudio, toggleMute } from './audio.js';
+import { stepPlayer, takeHit } from './player.js';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped. */
+/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
 const MAX_FRAME = 0.25;
 
 const params = new URLSearchParams(window.location.search);
@@ -28,84 +28,55 @@ const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() 
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
-const random = createRandom(seed);
-const world = createWorld(random);
-const city = createCity(random);
-const traffic = createTraffic(random);
-world.state.city = city;
-world.state.traffic = traffic;
-world.state.shot = '';
+const world = createWorld(createRandom(seed));
 const renderer = createRenderer(canvas);
-const audio = createAudio();
-
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
-  }
-}
+const saves = readSaves();
 
 function runShot(name) {
-  // The status pill is an HTML overlay — hide it so it never lands on a screenshot.
-  status.style.display = 'none';
-  const scene = stageShot(name, world, city, traffic);
+  const staged = stageShot(name, world);
   let painted = 0;
   function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
+    renderer.draw(world.state, world.city, staged.screen, saves, world.state.time);
     painted += 1;
-    if (painted >= 2) window.__shotReady = true;
-    // Keep painting: a late resize clears the canvas, and a single stopped frame
-    // would leave it blank. The loop is cheap and the shot is only for screenshots.
-    requestAnimationFrame(paint);
+    if (painted < 2) requestAnimationFrame(paint);
+    else window.__shotReady = true;
+    // Keep repainting: a resize after the shot would otherwise clear the canvas.
+    if (painted < 30) requestAnimationFrame(paint);
   }
   requestAnimationFrame(paint);
 }
 
 function runGame() {
   const input = createInput(canvas);
-  const wanted = { level: world.state.wanted };
   let screen = SCREEN_TITLE;
-  let best = readBest();
   let accumulator = 0;
   let last = performance.now();
 
+  // Screen readers (and anyone watching the page's text) hear the screen changes.
   function announce(message) {
     status.textContent = message;
   }
 
   function startGame() {
+    startAudio();
     world.reset();
-    world.state.city = city;
-    world.state.traffic = traffic;
-    world.state.shot = '';
-    wanted.level = world.state.wanted;
     accumulator = 0;
     screen = SCREEN_PLAY;
-    audio.unlock();
-    announce('Playing. Drive the Falcon GT. Lose the police, finish the job.');
+    announce('Playing. Job 6 of 8, the Captain\'s car. Wreck Dray\'s sedan.');
   }
 
-  function endGame(busted) {
+  function endGame() {
     screen = SCREEN_OVER;
-    world.state.busted = busted;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
-    }
-    announce(busted ? 'Busted. Tarnwick PD took you in.' : 'Wrecked. The Falcon gave out.');
+    saveToSlot(1, 'ACT 3', 55, world.state.money, world.state.clock);
+    announce(`Wrecked. The Strand keeps the car. Money $${world.state.money}.`);
   }
 
   function handleActions() {
     const actions = input.takeActions();
+    if (actions & ACTION_MUTE) {
+      toggleMute();
+      return;
+    }
     if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
     else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
@@ -113,27 +84,13 @@ function runGame() {
     } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
       screen = SCREEN_PLAY;
       announce('Playing.');
+    } else if (actions & ACTION_ENTER && screen === SCREEN_PLAY) {
+      world.state.player.onFoot = !world.state.player.onFoot;
+      world.state.mode = world.state.player.onFoot ? 'foot' : 'chase';
+      announce(world.state.player.onFoot ? 'On foot in Lantern Mile.' : 'Back in the Falcon GT.');
     }
-    if (screen !== SCREEN_PLAY) return;
-    if (actions & ACTION_EXIT) {
-      world.state.onFoot = !world.state.onFoot;
-      announce(world.state.onFoot ? 'On foot. Walk Lantern Mile.' : 'Back in the Falcon GT.');
-    }
-    if (actions & ACTION_RADIO) {
-      world.state.radio = (world.state.radio + 1) % 3;
-    }
-    if (actions & ACTION_ABILITY_1) {
-      const line = useAbility(world.state, wanted, 0);
-      if (line) announce(line);
-    }
-    if (actions & ACTION_ABILITY_2) {
-      const line = useAbility(world.state, wanted, 1);
-      if (line) announce(line);
-    }
-    if (actions & ACTION_ABILITY_3) {
-      const line = useAbility(world.state, wanted, 2);
-      if (line) announce(line);
-    }
+    const weapon = input.takeWeapon();
+    if (weapon) blip(440 + weapon * 80);
   }
 
   function step() {
@@ -141,15 +98,13 @@ function runGame() {
       world.step(STEP, 0, true);
       return;
     }
-    const direction = input.direction();
-    const state = world.state;
-    stepPlayer(state, STEP, direction, input.throttle(), input.brake());
-    const events = world.step(STEP, direction, false);
-    state.wanted = wanted.level;
-    audio.frame(state.speed, state.wanted, state.radio, STEP);
-    if (events & EVENT_OVER) endGame(false);
-    else if (events & EVENT_HIT) announce('Hit. The Falcon took damage.');
-    else if (events & EVENT_MISSION) announce('Time up — Dray’s sedan got away. The job goes on.');
+    const events = world.step(STEP, input.direction(), false);
+    stepPlayer(world.state.player, input.direction(), false, STEP);
+    setEngine(world.state.speed / 168);
+    if (events & EVENT_TIMER_END) {
+      takeHit(world.state.player, 40);
+      if (world.state.player.damage >= 100) endGame();
+    }
   }
 
   function frame(now) {
@@ -165,9 +120,10 @@ function runGame() {
     } else {
       accumulator = 0;
     }
-    renderer.draw(world.state, screen, best);
+    renderer.draw(world.state, world.city, screen, saves, world.state.time);
   }
 
+  // Leaving the tab pauses a running game rather than letting the timer run unseen.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
@@ -175,7 +131,7 @@ function runGame() {
     }
   });
 
-  announce('Tarnwick. Press Space or click to start.');
+  announce('Tarnwick. Come Home. Press Space or click to start.');
   requestAnimationFrame(frame);
 }
 

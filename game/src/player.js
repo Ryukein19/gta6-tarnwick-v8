@@ -1,74 +1,44 @@
-// The player: Renn Kovacs in Tam's Falcon GT. Steering, speed, damage, and the
-// three crew abilities (SWAP PLATES, QUICK FIX, EYES OUT) with their cooldowns.
+// Renn Kovacs and the Falcon GT — Tam's car, the hero of the chase. The player
+// steers across lanes, holds speed, and can spend nitro. Damage grows when the
+// police land a hit; at 100% the car is wrecked.
 
-import { FALCON } from './config.js';
-import { clamp } from './random.js';
-
-/** Ability cooldowns in seconds: 45 s plates, 60 s fix, 20 s eyes. */
-const COOLDOWNS = [45, 60, 20];
+import { FIELD } from './config.js';
 
 export function createPlayer() {
   return {
-    lane: 0.18,
-    speed: 107,
-    targetSpeed: 107,
-    condition: FALCON.condition,
-    health: 100,
-    armour: 60,
+    lane: 0.28,
+    speed: 112,
+    damage: 38,
+    nitro: 1,
+    nitroLeft: 100,
     onFoot: false,
     x: 0,
     y: 0,
-    cooldowns: [0, 12, 30],
-    eyesOut: 0,
+    width: 0,
   };
 }
 
-/** Steer and accelerate: direction -1/0/1, throttle 0..1, brake true/false. */
-export function stepPlayer(player, dt, direction, throttle, brake) {
-  if (player.onFoot) {
-    player.lane = clamp(player.lane + direction * 1.1 * dt, -0.85, 0.85);
-    player.speed = 0;
-    return;
-  }
-  player.lane = clamp(player.lane + direction * FALCON.steer * dt * (0.4 + player.speed / FALCON.topSpeed), -0.72, 0.72);
-  if (brake) player.targetSpeed = Math.max(0, player.targetSpeed - FALCON.brake * dt);
-  else player.targetSpeed = clamp(player.targetSpeed + FALCON.accel * throttle * dt, 0, FALCON.topSpeed);
-  player.speed += (player.targetSpeed - player.speed) * Math.min(1, dt * 1.4);
-  for (let i = 0; i < player.cooldowns.length; i += 1) {
-    if (player.cooldowns[i] > 0) player.cooldowns[i] = Math.max(0, player.cooldowns[i] - dt);
-  }
-  if (player.eyesOut > 0) player.eyesOut = Math.max(0, player.eyesOut - dt);
+/** Steer: direction -1/0/1, dt seconds, nitro held or not. */
+export function stepPlayer(player, direction, nitro, dt) {
+  player.lane = Math.max(-0.82, Math.min(0.82, player.lane + direction * dt * 0.85));
+  const target = nitro && player.nitroLeft > 0 ? 168 : 112;
+  player.speed += (target - player.speed) * Math.min(1, dt * 1.2);
+  if (nitro && player.nitroLeft > 0) player.nitroLeft = Math.max(0, player.nitroLeft - dt * 22);
+  else player.nitroLeft = Math.min(100, player.nitroLeft + dt * 4);
 }
 
-/**
- * Use an ability (0 = SWAP PLATES, 1 = QUICK FIX, 2 = EYES OUT).
- * Returns a short line for the HUD, or null when the ability is still cooling down.
- */
-export function useAbility(player, wanted, index) {
-  if (player.cooldowns[index] > 0) return null;
-  player.cooldowns[index] = COOLDOWNS[index];
-  if (index === 0) {
-    wanted.level = Math.max(1, wanted.level - 1);
-    return 'SWAP PLATES — plates swapped, heat down one star';
-  }
-  if (index === 1) {
-    player.condition = Math.min(100, player.condition + 40);
-    return 'QUICK FIX — Uncle Bram patched the Falcon, +40% condition';
-  }
-  player.eyesOut = 20;
-  return 'EYES OUT — Maren marked every unit for 20 s';
+/** Screen placement of the hero car: whole, large, centred slightly right. */
+export function heroPlacement() {
+  return {
+    x: FIELD.width * 0.56,
+    y: 512,
+    w: FIELD.width * 0.26,
+  };
 }
 
-/** Damage the car: returns true when the car is wrecked. */
-export function damagePlayer(player, amount) {
-  player.condition = Math.max(0, player.condition - amount);
-  if (player.armour > 0) {
-    const absorbed = Math.min(player.armour, amount * 0.6);
-    player.armour -= absorbed;
-    player.health -= (amount - absorbed) * 0.6;
-  } else {
-    player.health -= amount * 0.6;
-  }
-  player.health = Math.max(0, player.health);
-  return player.health <= 0;
+/** A police hit lands: damage grows, speed dips. Returns true when wrecked. */
+export function takeHit(player, amount) {
+  player.damage = Math.min(100, player.damage + amount);
+  player.speed = Math.max(40, player.speed - 18);
+  return player.damage >= 100;
 }

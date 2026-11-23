@@ -1,30 +1,30 @@
-// Saves: three slots in localStorage, each holding the act, the mission, the
-// money, the completion and the play time. Nothing here touches the network.
+// Saves: three slots in localStorage — act, completion %, money and time.
+// Storage can be off (private windows); then saves last this visit only.
 
-import { MISSIONS, SAVE_KEY } from './config.js';
-
-export const SLOTS = [
-  { slot: 1, act: 'ACT IV', label: 'THE CAPTAIN’S CAR', pct: 55, money: 24600, time: '6h 12m' },
-  { slot: 2, act: 'ACT II', label: 'STALL MONEY', pct: 24, money: 1840, time: '2h 40m' },
-  { slot: 3, act: 'ACT I', label: 'COMING HOME', pct: 8, money: 350, time: '0h 38m' },
-];
+import { SAVE_KEY } from './config.js';
 
 export function readSaves() {
   try {
     const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return SLOTS;
+    if (!raw) return defaultSaves();
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length !== 3) return SLOTS;
+    if (!Array.isArray(parsed) || parsed.length !== 3) return defaultSaves();
     return parsed;
   } catch {
-    return SLOTS;
+    return defaultSaves();
   }
 }
 
-export function writeSave(index, save) {
+export function defaultSaves() {
+  return [
+    { slot: 1, act: 'ACT 3', pct: 55, money: 24600, time: '18:47', empty: false },
+    { slot: 2, act: 'ACT 2', pct: 31, money: 12400, time: '12:20', empty: false },
+    { slot: 3, act: '', pct: 0, money: 0, time: '', empty: true },
+  ];
+}
+
+export function writeSaves(saves) {
   try {
-    const saves = readSaves();
-    saves[index] = save;
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(saves));
     return true;
   } catch {
@@ -32,14 +32,9 @@ export function writeSave(index, save) {
   }
 }
 
-export function saveFromState(state) {
-  const mission = MISSIONS[state.mission - 1];
-  return {
-    slot: 1,
-    act: `ACT ${['I', 'II', 'III', 'IV', 'V'][mission.act - 1] ?? 'I'}`,
-    label: mission.name,
-    pct: Math.round(55),
-    money: state.money,
-    time: '6h 12m',
-  };
+/** Overwrite one slot with the current progress. */
+export function saveToSlot(slot, act, pct, money, time) {
+  const saves = readSaves();
+  saves[slot - 1] = { slot, act, pct, money, time, empty: false };
+  return writeSaves(saves);
 }

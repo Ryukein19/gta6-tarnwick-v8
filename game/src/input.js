@@ -1,14 +1,12 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses
-// (start or restart, pause, abilities, radio) are queued as bit flags and taken once
-// by the loop, so a press between two frames is never lost and never counted twice.
+// Keyboard and pointer input. Held keys give a steering direction; one-shot
+// presses (start, pause, enter/exit, weapons, mute) are queued as bit flags and
+// taken once by the loop, so a press between two frames is never lost and never
+// counted twice.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
-export const ACTION_ABILITY_1 = 4;
-export const ACTION_ABILITY_2 = 8;
-export const ACTION_ABILITY_3 = 16;
-export const ACTION_RADIO = 32;
-export const ACTION_EXIT = 64;
+export const ACTION_ENTER = 4;
+export const ACTION_MUTE = 8;
 
 const LEFT = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT = new Set(['ArrowRight', 'KeyD']);
@@ -16,11 +14,9 @@ const UP = new Set(['ArrowUp', 'KeyW']);
 const DOWN = new Set(['ArrowDown', 'KeyS']);
 const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
-const ABILITY_1 = new Set(['KeyZ']);
-const ABILITY_2 = new Set(['KeyX']);
-const ABILITY_3 = new Set(['KeyC']);
-const RADIO = new Set(['KeyR']);
-const EXIT = new Set(['KeyE']);
+const ENTER = new Set(['KeyE']);
+const MUTE = new Set(['KeyM']);
+const WEAPONS = new Set(['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5']);
 
 export function createInput(target) {
   let left = false;
@@ -28,6 +24,7 @@ export function createInput(target) {
   let up = false;
   let down = false;
   let actions = 0;
+  let weapon = 0;
 
   window.addEventListener('keydown', (event) => {
     if (LEFT.has(event.code)) left = true;
@@ -38,16 +35,12 @@ export function createInput(target) {
       if (!event.repeat) actions |= ACTION_CONFIRM;
     } else if (PAUSE.has(event.code)) {
       if (!event.repeat) actions |= ACTION_PAUSE;
-    } else if (ABILITY_1.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_ABILITY_1;
-    } else if (ABILITY_2.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_ABILITY_2;
-    } else if (ABILITY_3.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_ABILITY_3;
-    } else if (RADIO.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_RADIO;
-    } else if (EXIT.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_EXIT;
+    } else if (ENTER.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_ENTER;
+    } else if (MUTE.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_MUTE;
+    } else if (WEAPONS.has(event.code)) {
+      weapon = Number(event.code.slice(-1));
     } else return;
     event.preventDefault();
   });
@@ -73,18 +66,20 @@ export function createInput(target) {
     direction() {
       return (right ? 1 : 0) - (left ? 1 : 0);
     },
-    /** 1 when the player holds the accelerator, 0 otherwise. */
+    /** True while the player holds the accelerator. */
     throttle() {
-      return up ? 1 : 0.6;
-    },
-    /** True while the brake key is held. */
-    brake() {
-      return down;
+      return up || down ? (up ? 1 : -0.5) : 0;
     },
     /** The one-shot presses since the last call, as ACTION_* flags. */
     takeActions() {
       const taken = actions;
       actions = 0;
+      return taken;
+    },
+    /** The last weapon slot pressed (1..5), 0 when none. */
+    takeWeapon() {
+      const taken = weapon;
+      weapon = 0;
       return taken;
     },
   };

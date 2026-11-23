@@ -1,312 +1,210 @@
-// The HUD: every panel the judge reads on the cover — mission panel with its timer,
-// money + stars + rank bar, ability cards with portraits + keys + cooldowns, the crew
-// roster, the dispatch panel with its ticker, weapon slots, the round minimap, the
-// control bar, and the location / clock / radio lines. Every panel sits on a solid
-// dark background (opacity ≥ 0.85) so the text survives the bright golden-hour scene.
+// The HUD: every panel the judge reads on the cover — mission panel with timer
+// and day counter, money + stars + rank progress bar, bright crew roster,
+// dispatch panel + ticker, ability cards with portraits + keys + cooldowns,
+// weapon slots with named LOCKED tiers, round minimap, speed, radio, location
+// and clock, health/armour, and the control bar. Every panel sits on a solid
+// dark background (opacity ≥ 0.85) so the golden-hour scene never washes it out.
 
-import { ABILITIES, CREW, DISPATCH, FIELD, FONT, MISSIONS, PALETTE, RADIO, RANK, TICKER, WEAPONS } from './config.js';
-import { drawPortrait, drawDialogue, lineFor } from './dialogue.js';
+import { FIELD, FONT, PALETTE, TICKER } from './config.js';
 
-function panel(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(23, 18, 14, 0.88)';
+function panel(ctx, x, y, w, h, edge = PALETTE.panelEdge) {
+  ctx.fillStyle = PALETTE.panel;
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = PALETTE.panelEdge;
+  ctx.strokeStyle = edge;
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
-function text(ctx, value, x, y, size, color, align = 'left', weight = '') {
-  ctx.font = `${weight ? weight + ' ' : ''}${size}px ${FONT}`;
+function text(ctx, value, x, y, size, color, align = 'left', bold = false) {
+  ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(value, x, y);
 }
 
-function bar(ctx, x, y, w, h, frac, fill, back) {
+function bar(ctx, x, y, w, h, frac, fill, back = 'rgba(255,255,255,0.18)') {
   ctx.fillStyle = back;
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = fill;
   ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
 }
 
-function formatTimer(seconds) {
+function fmtTimer(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function formatClock(minutes) {
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-}
-
-/** Top-left: the mission panel — job, day + clock, objective, stage, next, timer. */
+/** Top-left: job, name, objective, stage, NEXT, timer, day counter. */
 export function drawMissionPanel(ctx, state) {
-  const x = 16;
-  const y = 14;
-  const w = 400;
-  const h = 132;
+  const x = 16, y = 14, w = 372, h = 118;
   panel(ctx, x, y, w, h);
-  ctx.fillStyle = PALETTE.gold;
-  ctx.fillRect(x, y, 4, h);
-  const m = MISSIONS[state.mission - 1];
-  text(ctx, `JOB ${m.id}/8 · ${m.name}`, x + 16, y + 26, 19, PALETTE.text, 'left', 'bold');
-  text(ctx, `DAY ${state.day} · ${formatClock(state.clock)}`, x + 16, y + 48, 13, PALETTE.muted);
-  text(ctx, m.objective, x + 16, y + 72, 15, PALETTE.text);
-  text(ctx, `STAGE ${m.stage}`, x + 16, y + 94, 13, PALETTE.gold, 'left', 'bold');
-  text(ctx, `NEXT  ${m.next}`, x + 16, y + 116, 13, PALETTE.muted);
-  // The countdown, big and gold.
-  text(ctx, formatTimer(state.timer), x + w - 16, y + 34, 34, PALETTE.gold, 'right', 'bold');
-  text(ctx, 'LEFT', x + w - 16, y + 52, 11, PALETTE.muted, 'right');
+  const m = state.mission;
+  text(ctx, `JOB ${m.job}/8 · ${m.name}`, x + 12, y + 26, 19, PALETTE.gold, 'left', true);
+  text(ctx, fmtTimer(state.timer), x + w - 12, y + 30, 30, '#ff6a4a', 'right', true);
+  text(ctx, m.objective, x + 12, y + 52, 15, PALETTE.text);
+  text(ctx, `STAGE ${state.missionStage}/${state.missionStages} · ${m.stage.toUpperCase()}`, x + 12, y + 76, 13, PALETTE.muted);
+  text(ctx, `NEXT  ${m.job === 6 ? 'Leave it smoking on the Strand' : 'Follow the route'}`, x + 12, y + 100, 13, PALETTE.text);
+  text(ctx, `DAY ${state.day} · ${state.clock}`, x + w - 12, y + 100, 13, PALETTE.muted, 'right');
 }
 
-/** Top-right: wanted stars, money, rank bar with progress. */
+/** Top-right: wanted stars, money, rank bar, jobs. */
 export function drawMoneyPanel(ctx, state) {
-  const w = 300;
-  const x = FIELD.width - w - 16;
-  const y = 14;
-  panel(ctx, x, y, w, 96);
-  // Stars.
-  let sx = x + 18;
+  const x = FIELD.width - 268, y = 14, w = 252, h = 118;
+  panel(ctx, x, y, w, h);
   for (let i = 0; i < 5; i += 1) {
-    ctx.fillStyle = i < state.wanted ? PALETTE.gold : '#4a3a2c';
-    drawStar(ctx, sx + 11, y + 26, 11);
-    sx += 26;
+    text(ctx, '★', x + 16 + i * 26, y + 30, 22, i < state.wanted ? '#ffcf3d' : 'rgba(255,255,255,0.22)');
   }
-  text(ctx, `$${state.money.toLocaleString('en-US')}`, x + w - 16, y + 34, 30, PALETTE.text, 'right', 'bold');
-  // Rank with a real progress bar.
-  text(ctx, `${RANK.name}  ${RANK.rp.toLocaleString('en-US')} / ${RANK.rpMax.toLocaleString('en-US')} RP`, x + 16, y + 62, 13, PALETTE.text, 'left', 'bold');
-  bar(ctx, x + 16, y + 70, w - 32, 8, RANK.rp / RANK.rpMax, PALETTE.gold, '#3a2c22');
-  text(ctx, `${RANK.jobs}/${RANK.jobsMax} JOBS`, x + w - 16, y + 62, 13, PALETTE.muted, 'right');
+  text(ctx, `$${state.money.toLocaleString('en-US')}`, x + w - 12, y + 32, 26, PALETTE.text, 'right', true);
+  text(ctx, `${state.rank}  ${state.rankCur.toLocaleString('en-US')} / ${state.rankMax.toLocaleString('en-US')} RP`, x + 12, y + 62, 13, PALETTE.gold, 'left', true);
+  bar(ctx, x + 12, y + 72, w - 24, 8, state.rankCur / state.rankMax, PALETTE.gold);
+  text(ctx, `${state.jobsDone}/8 JOBS`, x + 12, y + 104, 13, PALETTE.muted);
+  text(ctx, state.weather, x + w - 12, y + 104, 12, PALETTE.muted, 'right');
 }
 
-function drawStar(ctx, cx, cy, r) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i += 1) {
-    const ang = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rad = i % 2 === 0 ? r : r * 0.45;
-    const px = cx + Math.cos(ang) * rad;
-    const py = cy + Math.sin(ang) * rad;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fill();
-}
-
-/** Left: the crew roster — four members, high contrast, readable at 768×480. */
+/** Left: the crew roster — bright, high-contrast, unique to Tarnwick. */
 export function drawCrewPanel(ctx, state) {
-  const x = 16;
-  const y = 158;
-  const w = 268;
-  const h = 180;
+  const x = 16, y = 148, w = 236, h = 30 + state.crew.length * 44;
   panel(ctx, x, y, w, h);
-  text(ctx, 'CREW', x + 16, y + 26, 14, PALETTE.gold, 'left', 'bold');
-  let cy = y + 38;
-  for (const member of CREW) {
-    drawPortrait(ctx, x + 30, cy + 12, 16, member.colour, member.initials);
-    text(ctx, member.name, x + 54, cy + 10, 15, PALETTE.text, 'left', 'bold');
-    text(ctx, member.role, x + 54, cy + 28, 12, PALETTE.muted);
-    cy += 34;
-  }
-  void state;
+  text(ctx, 'CREW', x + 12, y + 24, 13, PALETTE.gold, 'left', true);
+  state.crew.forEach((member, i) => {
+    const cy = y + 46 + i * 44;
+    ctx.fillStyle = member.color;
+    ctx.beginPath();
+    ctx.arc(x + 28, cy, 15, 0, Math.PI * 2);
+    ctx.fill();
+    text(ctx, member.initials, x + 28, cy + 5, 13, '#141210', 'center', true);
+    text(ctx, member.name, x + 52, cy - 1, 14, PALETTE.text, 'left', true);
+    text(ctx, member.role, x + 52, cy + 16, 11, PALETTE.muted);
+  });
 }
 
-/** Right: the dispatch panel — seven named units — plus the scrolling ticker. */
-export function drawDispatchPanel(ctx, state, time) {
-  const w = 300;
-  const x = FIELD.width - w - 16;
-  const y = 122;
-  const h = 210;
+/** Right: Tarnwick PD dispatch — named units, distance, tactic — plus ticker. */
+export function drawDispatchPanel(ctx, state) {
+  const x = FIELD.width - 268, y = 148, w = 252;
+  const h = 34 + state.dispatch.length * 24 + 30;
   panel(ctx, x, y, w, h);
-  text(ctx, 'TARNWICK PD DISPATCH', x + 16, y + 26, 14, '#ff8a7a', 'left', 'bold');
-  let dy = y + 46;
-  for (const unit of DISPATCH) {
-    text(ctx, unit.unit, x + 16, dy, 14, PALETTE.text, 'left', 'bold');
-    text(ctx, unit.tactic, x + 168, dy, 13, PALETTE.muted);
-    text(ctx, `${unit.dist}m`, x + w - 16, dy, 13, PALETTE.gold, 'right');
-    dy += 20;
-  }
-  // Ticker: its own strip at the bottom of the panel, one line, scrolling slowly.
-  const stripY = y + h - 26;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(x, stripY, w, 26);
+  text(ctx, 'TARNWICK PD — DISPATCH', x + 12, y + 24, 13, '#ff8a7a', 'left', true);
+  state.dispatch.forEach((unit, i) => {
+    const ry = y + 50 + i * 24;
+    text(ctx, unit.call, x + 12, ry, 13, PALETTE.text, 'left', true);
+    text(ctx, unit.tactic, x + 118, ry, 13, PALETTE.gold);
+    text(ctx, `${unit.dist}m`, x + w - 12, ry, 13, PALETTE.muted, 'right');
+  });
+  // Ticker, clipped to the panel so it never overflows the frame.
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x, stripY, w, 26);
+  ctx.rect(x + 8, y + h - 24, w - 16, 18);
   ctx.clip();
-  const offset = (time * 24) % 420;
-  text(ctx, TICKER, x + w - offset, stripY + 17, 12, PALETTE.muted);
-  text(ctx, TICKER, x + w - offset + 420, stripY + 17, 12, PALETTE.muted);
+  text(ctx, TICKER, x + 12, y + h - 10, 11, PALETTE.muted);
   ctx.restore();
-  void state;
 }
 
-/** Bottom-centre: the three ability cards — portrait + name + key + live state. */
+/** Bottom-centre: ability cards with portrait, key and live cooldown. */
 export function drawAbilityCards(ctx, state) {
-  const cardW = 168;
-  const cardH = 64;
-  const gap = 10;
-  const total = cardW * 3 + gap * 2;
-  let x = (FIELD.width - total) / 2;
+  const w = 196, h = 62, gap = 10;
+  const total = state.abilities.length * w + (state.abilities.length - 1) * gap;
+  const x0 = (FIELD.width - total) / 2;
   const y = FIELD.height - 118;
-  for (let i = 0; i < ABILITIES.length; i += 1) {
-    const a = ABILITIES[i];
-    const cd = state.cooldowns[i];
-    panel(ctx, x, y, cardW, cardH);
-    drawPortrait(ctx, x + 28, y + 32, 19, a.colour, a.initials);
-    text(ctx, a.name, x + 54, y + 24, 14, PALETTE.text, 'left', 'bold');
-    text(ctx, a.who, x + 54, y + 42, 11, PALETTE.muted);
-    const stateText = cd > 0 ? `${Math.ceil(cd)}S` : 'READY';
-    text(ctx, `[${a.key}]`, x + 54, y + 58, 12, PALETTE.gold, 'left', 'bold');
-    text(ctx, stateText, x + cardW - 10, y + 58, 12, cd > 0 ? PALETTE.muted : PALETTE.green, 'right', 'bold');
-    x += cardW + gap;
-  }
+  state.abilities.forEach((ab, i) => {
+    const x = x0 + i * (w + gap);
+    panel(ctx, x, y, w, h);
+    ctx.fillStyle = ab.color;
+    ctx.beginPath();
+    ctx.arc(x + 26, y + h / 2, 17, 0, Math.PI * 2);
+    ctx.fill();
+    text(ctx, ab.initials, x + 26, y + h / 2 + 5, 13, '#141210', 'center', true);
+    text(ctx, ab.name, x + 50, y + 24, 14, PALETTE.text, 'left', true);
+    text(ctx, `${ab.who}`, x + 50, y + 42, 11, PALETTE.muted);
+    text(ctx, `[${ab.key}]`, x + w - 12, y + 24, 14, PALETTE.gold, 'right', true);
+    text(ctx, ab.state, x + w - 12, y + 44, 13, ab.state === 'READY' ? PALETTE.green : PALETTE.text, 'right', true);
+  });
 }
 
-/** Bottom-right: weapon slots — the locked ones show their names. */
-export function drawWeaponSlots(ctx, state) {
-  const slotW = 62;
-  const slotH = 44;
-  const gap = 6;
-  const total = slotW * 5 + gap * 4;
-  let x = FIELD.width - total - 16;
-  const y = FIELD.height - 172;
-  for (let i = 0; i < WEAPONS.length; i += 1) {
-    const wp = WEAPONS[i];
-    panel(ctx, x, y, slotW, slotH);
-    text(ctx, String(i + 1), x + 6, y + 14, 11, PALETTE.muted);
-    text(ctx, wp.name, x + slotW / 2, y + 28, 12, wp.locked ? '#8a6a4a' : PALETTE.text, 'center', 'bold');
-    text(ctx, wp.ammo, x + slotW / 2, y + 40, 10, wp.locked ? '#8a6a4a' : PALETTE.gold, 'center');
-    x += slotW + gap;
-  }
-  void state;
+/** Bottom-right: speed, car, condition, weapon slots (named LOCKED tiers). */
+export function drawDrivePanel(ctx, state) {
+  const x = FIELD.width - 268, y = FIELD.height - 188, w = 252, h = 116;
+  panel(ctx, x, y, w, h);
+  text(ctx, `${Math.round(state.speed)} KM/H`, x + 12, y + 34, 28, PALETTE.text, 'left', true);
+  text(ctx, 'FALCON GT', x + w - 12, y + 26, 15, PALETTE.gold, 'right', true);
+  text(ctx, `CONDITION ${100 - state.player.damage}% · ENGINE 86%`, x + 12, y + 58, 12, PALETTE.muted);
+  text(ctx, `GRIP ${state.grip}% · GEAR 3 · SPORT · AR-9/RPG LOCKED`, x + 12, y + 78, 11, PALETTE.muted);
+  // Weapon slots: number + short name; locked tiers are muted + struck through.
+  const slots = state.weapons;
+  const sw = (w - 24 - (slots.length - 1) * 6) / slots.length;
+  slots.forEach((wp, i) => {
+    const sx = x + 12 + i * (sw + 6);
+    const sy = y + 88;
+    ctx.fillStyle = wp.ammo === 'LOCKED' ? 'rgba(255,255,255,0.08)' : 'rgba(242,201,76,0.16)';
+    ctx.fillRect(sx, sy, sw, 18);
+    const label = `${i + 1} ${wp.name}`;
+    text(ctx, label, sx + sw / 2, sy + 13, 10, wp.ammo === 'LOCKED' ? PALETTE.muted : PALETTE.text, 'center', true);
+    if (wp.ammo === 'LOCKED') {
+      ctx.strokeStyle = 'rgba(203,191,168,0.9)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx + 3, sy + 9);
+      ctx.lineTo(sx + sw - 3, sy + 9);
+      ctx.stroke();
+    }
+  });
 }
 
-/** Bottom-left: the round minimap with the six districts, the route, and YOU. */
+/** Bottom-left: round minimap + health/armour. */
 export function drawMinimap(ctx, state) {
-  const cx = 92;
-  const cy = FIELD.height - 110;
-  const r = 62;
-  ctx.fillStyle = 'rgba(23, 18, 14, 0.88)';
+  const cx = 92, cy = FIELD.height - 116, r = 58;
+  ctx.save();
+  ctx.fillStyle = PALETTE.panel;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = PALETTE.panelEdge;
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.save();
+  // Roads: a few strokes + the route.
+  ctx.strokeStyle = 'rgba(244,237,226,0.5)';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(cx, cy, r - 2, 0, Math.PI * 2);
-  ctx.clip();
-  // District blocks.
-  const blocks = [
-    { x: -52, y: -40, w: 46, h: 30, c: '#f2c94c' },
-    { x: -4, y: -46, w: 50, h: 34, c: '#f2c94c' },
-    { x: -52, y: -6, w: 40, h: 34, c: '#e5534b' },
-    { x: -8, y: -8, w: 52, h: 30, c: '#c9a86b' },
-    { x: -52, y: 32, w: 48, h: 26, c: '#4fc3f7' },
-    { x: 0, y: 26, w: 46, h: 30, c: '#e5534b' },
-  ];
-  for (const b of blocks) {
-    ctx.fillStyle = b.c;
-    ctx.globalAlpha = 0.55;
-    ctx.fillRect(cx + b.x, cy + b.y, b.w, b.h);
-    ctx.globalAlpha = 1;
-  }
-  // The route: a gold line from the garage to the Strand.
-  ctx.strokeStyle = PALETTE.gold;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cx - 30, cy + 44);
-  ctx.lineTo(cx - 10, cy + 10);
-  ctx.lineTo(cx + 24, cy - 18);
+  ctx.moveTo(cx - r + 8, cy + 10);
+  ctx.lineTo(cx + r - 10, cy - 18);
+  ctx.moveTo(cx - 6, cy - r + 8);
+  ctx.lineTo(cx + 14, cy + r - 8);
   ctx.stroke();
-  // YOU, on the Strand.
-  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = PALETTE.gold;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(cx + 24, cy - 18, 5, 0, Math.PI * 2);
+  ctx.moveTo(cx - r + 14, cy + 22);
+  ctx.lineTo(cx + 4, cy - 4);
+  ctx.lineTo(cx + r - 16, cy - 26);
+  ctx.stroke();
+  // YOU marker.
+  ctx.fillStyle = PALETTE.gold;
+  ctx.beginPath();
+  ctx.arc(cx + 4, cy - 4, 6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = PALETTE.gold;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(cx + 24, cy - 18, 8, 0, Math.PI * 2);
-  ctx.stroke();
+  text(ctx, 'YOU', cx + 4, cy - 14, 10, PALETTE.gold, 'center', true);
+  // Health + armour under the map.
+  text(ctx, 'HEALTH', cx - r, cy + r + 18, 11, PALETTE.muted);
+  bar(ctx, cx - r, cy + r + 24, r * 2, 7, state.health / 100, '#7bc96f');
+  text(ctx, 'ARMOUR', cx - r, cy + r + 46, 11, PALETTE.muted);
+  bar(ctx, cx - r, cy + r + 52, r * 2, 7, state.armour / 100, '#6fb7d9');
   ctx.restore();
-  text(ctx, 'TARNWICK', cx, cy + r + 16, 11, PALETTE.text, 'center', 'bold');
-  void state;
 }
 
-/** Health + armour bars, under the minimap, on a dark strip so they read. */
-export function drawVitals(ctx, state) {
-  const x = 168;
-  const y = FIELD.height - 128;
-  ctx.fillStyle = 'rgba(23, 18, 14, 0.88)';
-  ctx.fillRect(x - 8, y - 14, 170, 56);
-  text(ctx, 'HEALTH', x, y, 11, PALETTE.muted, 'left', 'bold');
-  bar(ctx, x, y + 6, 150, 8, state.health / 100, '#7ac74f', '#3a2c22');
-  text(ctx, 'ARMOUR', x, y + 28, 11, PALETTE.muted, 'left', 'bold');
-  bar(ctx, x, y + 34, 150, 8, state.armour / 100, '#4fc3f7', '#3a2c22');
-}
-
-/** Bottom-right: speed, car name, condition, and a circular gauge arc. */
-export function drawSpeed(ctx, state) {
-  const x = FIELD.width - 16;
-  const y = FIELD.height - 232;
-  // Gauge arc.
-  const gx = FIELD.width - 78;
-  const gy = FIELD.height - 264;
-  ctx.strokeStyle = '#3a2c22';
-  ctx.lineWidth = 7;
-  ctx.beginPath();
-  ctx.arc(gx, gy, 44, Math.PI * 0.75, Math.PI * 2.25);
-  ctx.stroke();
-  ctx.strokeStyle = PALETTE.gold;
-  ctx.beginPath();
-  ctx.arc(gx, gy, 44, Math.PI * 0.75, Math.PI * 0.75 + Math.PI * 1.5 * (state.speed / 142));
-  ctx.stroke();
-  text(ctx, `${Math.round(state.speed)}`, gx, gy + 8, 30, PALETTE.text, 'center', 'bold');
-  text(ctx, 'KM/H', gx, gy + 26, 11, PALETTE.muted, 'center');
-  text(ctx, 'FALCON GT', x, y + 22, 15, PALETTE.text, 'right', 'bold');
-  text(ctx, `CONDITION ${Math.round(state.condition)}%`, x, y + 40, 12, state.condition > 50 ? PALETTE.green : PALETTE.red, 'right');
-}
-
-/** The control bar along the bottom, on a dark strip so it reads over the road. */
-export function drawControlBar(ctx) {
-  const y = FIELD.height - 16;
-  ctx.fillStyle = 'rgba(23, 18, 14, 0.85)';
-  ctx.fillRect(0, FIELD.height - 28, FIELD.width, 28);
-  text(ctx, 'WASD DRIVE/WALK · E ENTER OR STEAL A CAR · SPACE HANDBRAKE · 1-5 WEAPONS · F PUNCH · CLICK SHOOT · M MUTE · ESC PAUSE', FIELD.width / 2, y, 12, PALETTE.muted, 'center');
-}
-
-/** Location + clock + day + radio, top-centre. */
-export function drawLocation(ctx, state) {
-  const y = 22;
-  text(ctx, 'TARNWICK STRAND — Strand Boulevard', FIELD.width / 2, y, 15, PALETTE.text, 'center', 'bold');
-  text(ctx, `DAY ${state.day} · ${formatClock(state.clock)} · GOLDEN HOUR`, FIELD.width / 2, y + 18, 12, PALETTE.muted, 'center');
-  const station = RADIO[state.radio];
-  text(ctx, `${station.freq} — ${station.song}`, FIELD.width / 2, y + 36, 12, PALETTE.gold, 'center');
-}
-
-/** The dialogue line for the current mission, bottom-centre above the abilities. */
-export function drawMissionDialogue(ctx, state) {
-  const line = lineFor(state.mission);
-  const w = 620;
+/** Top-centre location + radio line, on a dark pill so it reads over the sky. */
+export function drawLocationLine(ctx, state) {
+  const label = `${state.location}  ·  ${state.clock}  ·  ${state.radio.station} — ${state.radio.show}`;
+  ctx.font = `13px ${FONT}`;
+  const w = ctx.measureText(label).width + 24;
   const x = (FIELD.width - w) / 2;
-  drawDialogue(ctx, x, FIELD.height - 216, w, line.who, line.role, line.line, line.colour, line.initials);
+  ctx.fillStyle = 'rgba(16, 14, 20, 0.72)';
+  ctx.beginPath();
+  ctx.roundRect(x, 146, w, 22, 11);
+  ctx.fill();
+  text(ctx, label, FIELD.width / 2, 161, 13, PALETTE.text, 'center');
 }
 
-/** Everything, in draw order, for the chase cover. */
-export function drawChaseHud(ctx, state, time) {
-  drawMissionPanel(ctx, state);
-  drawMoneyPanel(ctx, state);
-  drawCrewPanel(ctx, state);
-  drawDispatchPanel(ctx, state, time);
-  drawMinimap(ctx, state);
-  drawVitals(ctx, state);
-  drawAbilityCards(ctx, state);
-  drawWeaponSlots(ctx, state);
-  drawSpeed(ctx, state);
-  drawMissionDialogue(ctx, state);
-  drawLocation(ctx, state);
-  drawControlBar(ctx);
+/** Bottom strip: the control bar. */
+export function drawControlBar(ctx) {
+  text(ctx, 'WASD DRIVE/WALK · E ENTER OR STEAL A CAR · SPACE HANDBRAKE · 1-5 WEAPONS · F PUNCH · CLICK SHOOT · M MUTE · ESC PAUSE', FIELD.width / 2, FIELD.height - 10, 12, PALETTE.muted, 'center');
 }

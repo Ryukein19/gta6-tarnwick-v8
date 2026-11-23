@@ -1,53 +1,48 @@
-// The eight story jobs across the five-act arc. Each mission knows its act, its
-// objective, the line that advances it, and what the next job asks for. The current
-// job for the cover is JOB 6/8 — THE CAPTAIN'S CAR.
+// The eight story jobs in five acts. "Come Home": Renn Kovacs returns after six
+// years; brother Tam died on a smuggling run; sister Sena runs the Kovac Garage;
+// fixer Uncle Bram; antagonist Capt. Elias Dray; rival crew GREYLINE. No Rockstar
+// names, places or characters anywhere.
 
 import { MISSIONS } from './config.js';
 
-export { MISSIONS };
-
-export function missionById(id) {
-  return MISSIONS[id - 1];
+/** Mission by job number (1..8). */
+export function missionByJob(job) {
+  return MISSIONS.find((m) => m.job === job) ?? MISSIONS[0];
 }
 
-/** The act a mission belongs to, as a Roman numeral for the HUD. */
-export function actNumeral(act) {
-  return ['I', 'II', 'III', 'IV', 'V'][act - 1] ?? 'I';
+/** Act label for a job: "ACT 3/5". */
+export function actLabel(job) {
+  const m = missionByJob(job);
+  return `ACT ${m.act}/5`;
 }
 
-/** "JOB 6/8" label for a mission id. */
-export function jobLabel(id) {
-  return `JOB ${id}/8`;
-}
+/** The five acts, with their jobs, for the pause-menu progress bars. */
+export const ACTS = [
+  { act: 1, name: 'HOMECOMING', jobs: [1, 2] },
+  { act: 2, name: 'DEBTS', jobs: [3, 4] },
+  { act: 3, name: 'THE WAKE', jobs: [5, 6] },
+  { act: 4, name: 'TAKEDOWN', jobs: [7] },
+  { act: 5, name: 'COME HOME', jobs: [8] },
+];
 
-/** How far through the story the player is, as a 0..1 fraction. */
-export function storyFraction(id) {
-  return (id - 1) / MISSIONS.length;
-}
-
-/** The next mission after this one, or null after the finale. */
-export function nextMission(id) {
-  return id < MISSIONS.length ? MISSIONS[id] : null;
-}
-
-/** The staged cover mission: JOB 6/8, THE CAPTAIN'S CAR, STAGE 2/4, timer 1:47. */
-export const COVER_MISSION = {
-  id: 6,
-  timer: 107,
-  stage: 2,
-  stages: 4,
-  sedanDamage: 58,
-  day: 6,
-  clock: '18:47',
-  money: 24600,
-};
-
-/** The on-foot mission: JOB 3/8, STALL MONEY, Lantern Mile, 2 of 5 collected. */
-export const FOOT_MISSION = {
-  id: 3,
-  collected: 2,
-  total: 5,
-  day: 3,
-  clock: '21:12',
-  money: 1840,
+/** Progress summary for the pause menu: story jobs done, races, stunts, collectibles. */
+export const CAREER = {
+  storyDone: 5,
+  storyTotal: 8,
+  racesDone: 2,
+  racesTotal: 4,
+  stuntsDone: 3,
+  stuntsTotal: 8,
+  collectiblesDone: 9,
+  collectiblesTotal: 20,
+  districtJobsDone: 5,
+  districtJobsTotal: 7,
+  crewDone: 3,
+  crewTotal: 3,
+  carsStolen: 37,
+  copsEscaped: 9,
+  kmDriven: 61.4,
+  peopleOut: 17,
+  longestJump: 34,
+  nextGoal: 'Wreck Dray\'s sedan — JOB 6/8 · THE CAPTAIN\'S CAR',
 };

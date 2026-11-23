@@ -1,183 +1,150 @@
-// Vehicles: the hero Falcon GT (whole, large, centred), the Tarnwick PD cruisers,
-// and the burning car on the left of the road. All drawn from behind in canvas 2D,
-// with a long golden-hour shadow thrown toward the viewer.
+// Drawing cars, scooters and people in canvas 2D. A car is a body with a cabin,
+// windows, wheels, a spoiler and a plate, drawn at (x, y) with width w — the
+// projection decides how big w is, so the same code draws the hero Falcon GT
+// large in the foreground and a traffic car small near the horizon.
 
-import { FALCON, PALETTE } from './config.js';
-import { project } from './geom.js';
-
-/**
- * The hero car: bright orange Falcon GT, rear three-quarter view, spoiler, dented
- * rear quarter, a smoke wisp from the exhaust, TAM-6 plate. (x, y) is the screen
- * centre of the car's base; w is its on-screen width.
- */
-export function drawFalcon(ctx, x, y, w, time) {
+/** Draw a car facing away from the camera (rear view). y is the ground line. */
+export function drawCar(ctx, x, y, w, color, opts = {}) {
   const h = w * 0.42;
-  const left = x - w / 2;
-  const top = y - h;
-  // Long shadow toward the viewer (sun low behind).
-  ctx.fillStyle = 'rgba(20, 10, 5, 0.4)';
+  const bodyH = h * 0.62;
+  const dark = opts.dark ?? '#1c1a18';
+  ctx.save();
+  ctx.translate(x, y);
+  // Shadow.
+  ctx.fillStyle = 'rgba(20, 12, 8, 0.4)';
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.06, y + h * 0.06, w * 0.52, h * 0.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 2, w * 0.52, h * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Rear bumper and body.
-  ctx.fillStyle = PALETTE.falconDark;
+  // Body.
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(left, y);
-  ctx.lineTo(left + w * 0.04, top + h * 0.42);
-  ctx.lineTo(left + w * 0.96, top + h * 0.42);
-  ctx.lineTo(left + w, y);
+  ctx.moveTo(-w / 2, 0);
+  ctx.lineTo(-w / 2 + w * 0.04, -bodyH * 0.7);
+  ctx.lineTo(-w * 0.36, -bodyH);
+  ctx.lineTo(w * 0.36, -bodyH);
+  ctx.lineTo(w / 2 - w * 0.04, -bodyH * 0.7);
+  ctx.lineTo(w / 2, 0);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = PALETTE.falcon;
+  // Cabin + rear window.
+  ctx.fillStyle = dark;
   ctx.beginPath();
-  ctx.moveTo(left + w * 0.02, y - h * 0.02);
-  ctx.lineTo(left + w * 0.07, top + h * 0.5);
-  ctx.lineTo(left + w * 0.13, top + h * 0.3);
-  ctx.lineTo(left + w * 0.87, top + h * 0.3);
-  ctx.lineTo(left + w * 0.93, top + h * 0.5);
-  ctx.lineTo(left + w * 0.98, y - h * 0.02);
+  ctx.moveTo(-w * 0.32, -bodyH * 0.98);
+  ctx.lineTo(-w * 0.26, -h * 0.98);
+  ctx.lineTo(w * 0.26, -h * 0.98);
+  ctx.lineTo(w * 0.32, -bodyH * 0.98);
   ctx.closePath();
   ctx.fill();
-  // Cabin / rear window: dark glass catching the low sun on its upper edge.
-  ctx.fillStyle = '#1e2c40';
-  ctx.beginPath();
-  ctx.moveTo(left + w * 0.18, top + h * 0.32);
-  ctx.lineTo(left + w * 0.26, top + h * 0.06);
-  ctx.lineTo(left + w * 0.74, top + h * 0.06);
-  ctx.lineTo(left + w * 0.82, top + h * 0.32);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255, 200, 120, 0.5)';
-  ctx.fillRect(left + w * 0.28, top + h * 0.08, w * 0.44, h * 0.05);
-  // Warm sun glint on the roof.
-  ctx.fillStyle = 'rgba(255, 243, 196, 0.55)';
-  ctx.fillRect(left + w * 0.3, top + h * 0.1, w * 0.4, h * 0.05);
+  ctx.fillStyle = 'rgba(255, 220, 160, 0.35)';
+  ctx.fillRect(-w * 0.24, -h * 0.96, w * 0.48, h * 0.1);
   // Spoiler.
-  ctx.fillStyle = PALETTE.falconDark;
-  ctx.fillRect(left + w * 0.06, top + h * 0.28, w * 0.88, h * 0.05);
-  ctx.fillRect(left + w * 0.1, top + h * 0.32, w * 0.03, h * 0.1);
-  ctx.fillRect(left + w * 0.87, top + h * 0.32, w * 0.03, h * 0.1);
-  // Dented rear quarter (Tam's car has been through it).
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-  ctx.beginPath();
-  ctx.ellipse(left + w * 0.82, top + h * 0.62, w * 0.09, h * 0.16, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  // Taillight bar, glowing.
-  ctx.fillStyle = '#ff2e2e';
-  ctx.fillRect(left + w * 0.08, top + h * 0.56, w * 0.84, h * 0.07);
-  ctx.fillStyle = 'rgba(255, 46, 46, 0.35)';
-  ctx.fillRect(left + w * 0.06, top + h * 0.52, w * 0.88, h * 0.15);
-  // Plate: TAM-6.
-  ctx.fillStyle = '#f7f2e8';
-  ctx.fillRect(left + w * 0.42, top + h * 0.72, w * 0.16, h * 0.14);
-  ctx.fillStyle = '#1a1a22';
-  ctx.font = `bold ${Math.max(9, h * 0.09)}px ${'system-ui, sans-serif'}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(FALCON.plate, left + w * 0.5, top + h * 0.79);
-  // Twin exhausts + a smoke wisp that curls up behind the car.
-  ctx.fillStyle = '#2a2a33';
-  ctx.fillRect(left + w * 0.3, y - h * 0.04, w * 0.05, h * 0.05);
-  ctx.fillRect(left + w * 0.65, y - h * 0.04, w * 0.05, h * 0.05);
-  const wisp = (time * 0.7) % 1;
-  ctx.fillStyle = `rgba(220, 220, 220, ${0.5 * (1 - wisp)})`;
-  ctx.beginPath();
-  ctx.arc(left + w * 0.32 + Math.sin(time * 2) * 6, y - h * 0.1 - wisp * 46, 8 + wisp * 16, 0, Math.PI * 2);
-  ctx.fill();
+  if (opts.spoiler) {
+    ctx.fillStyle = dark;
+    ctx.fillRect(-w * 0.42, -h * 1.06, w * 0.84, h * 0.05);
+    ctx.fillRect(-w * 0.4, -h * 0.98, w * 0.03, h * 0.1);
+    ctx.fillRect(w * 0.37, -h * 0.98, w * 0.03, h * 0.1);
+  }
+  // Tail lights.
+  ctx.fillStyle = '#ff3b30';
+  ctx.fillRect(-w * 0.46, -bodyH * 0.42, w * 0.14, h * 0.09);
+  ctx.fillRect(w * 0.32, -bodyH * 0.42, w * 0.14, h * 0.09);
+  // Plate.
+  if (opts.plate) {
+    ctx.fillStyle = '#f4ede2';
+    ctx.fillRect(-w * 0.13, -bodyH * 0.34, w * 0.26, h * 0.14);
+    ctx.fillStyle = '#1c1a18';
+    ctx.font = `bold ${Math.max(8, h * 0.11)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(opts.plate, 0, -bodyH * 0.27);
+  }
   // Wheels.
-  ctx.fillStyle = '#14141a';
-  ctx.fillRect(left + w * 0.05, y - h * 0.16, w * 0.13, h * 0.16);
-  ctx.fillRect(left + w * 0.82, y - h * 0.16, w * 0.13, h * 0.16);
-}
-
-/** A Tarnwick PD cruiser: white body, black doors, light bar flashing red/blue. */
-export function drawCruiser(ctx, x, y, w, time, phase) {
-  const h = w * 0.4;
-  const left = x - w / 2;
-  const top = y - h;
-  ctx.fillStyle = 'rgba(20, 10, 5, 0.35)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + h * 0.04, w * 0.5, h * 0.09, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = PALETTE.cruiser;
-  ctx.beginPath();
-  ctx.moveTo(left, y);
-  ctx.lineTo(left + w * 0.05, top + h * 0.46);
-  ctx.lineTo(left + w * 0.14, top + h * 0.28);
-  ctx.lineTo(left + w * 0.86, top + h * 0.28);
-  ctx.lineTo(left + w * 0.95, top + h * 0.46);
-  ctx.lineTo(left + w, y);
-  ctx.closePath();
-  ctx.fill();
-  // Black doors.
-  ctx.fillStyle = PALETTE.cruiserDark;
-  ctx.fillRect(left + w * 0.3, top + h * 0.42, w * 0.4, h * 0.42);
-  // Rear window.
-  ctx.fillStyle = '#16202e';
-  ctx.fillRect(left + w * 0.2, top + h * 0.3, w * 0.6, h * 0.16);
-  // Light bar: alternating red and blue.
-  const on = Math.floor(time * 3 + phase) % 2 === 0;
-  ctx.fillStyle = on ? '#ff2e2e' : '#2e7bff';
-  ctx.fillRect(left + w * 0.32, top + h * 0.14, w * 0.16, h * 0.08);
-  ctx.fillStyle = on ? '#2e7bff' : '#ff2e2e';
-  ctx.fillRect(left + w * 0.52, top + h * 0.14, w * 0.16, h * 0.08);
-  ctx.fillStyle = on ? 'rgba(255, 46, 46, 0.3)' : 'rgba(46, 123, 255, 0.3)';
-  ctx.beginPath();
-  ctx.arc(left + w * 0.5, top + h * 0.18, w * 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  // Taillights.
-  ctx.fillStyle = '#ff2e2e';
-  ctx.fillRect(left + w * 0.06, top + h * 0.58, w * 0.14, h * 0.08);
-  ctx.fillRect(left + w * 0.8, top + h * 0.58, w * 0.14, h * 0.08);
-  // "TARNWICK PD" on the rear.
-  ctx.fillStyle = '#1a1a22';
-  ctx.font = `bold ${Math.max(8, h * 0.09)}px ${'system-ui, sans-serif'}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('TARNWICK PD', left + w * 0.5, top + h * 0.78);
-}
-
-/** The burning car on the left of the road: flames, a smoke column, a crowd-free gap. */
-export function drawBurningCar(ctx, x, y, w, time) {
-  const h = w * 0.42;
-  const left = x - w / 2;
-  const top = y - h;
-  ctx.fillStyle = 'rgba(20, 10, 5, 0.4)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + h * 0.05, w * 0.52, h * 0.1, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Charred body.
-  ctx.fillStyle = '#2e2620';
-  ctx.beginPath();
-  ctx.moveTo(left, y);
-  ctx.lineTo(left + w * 0.06, top + h * 0.44);
-  ctx.lineTo(left + w * 0.16, top + h * 0.26);
-  ctx.lineTo(left + w * 0.84, top + h * 0.26);
-  ctx.lineTo(left + w * 0.94, top + h * 0.44);
-  ctx.lineTo(left + w, y);
-  ctx.closePath();
-  ctx.fill();
-  // Flames licking up from the engine bay.
-  for (let f = 0; f < 3; f += 1) {
-    const fx = left + w * (0.3 + f * 0.2) + Math.sin(time * 6 + f * 2) * 6;
-    const fh = h * (0.5 + 0.25 * Math.sin(time * 8 + f * 3));
-    const grad = ctx.createLinearGradient(0, top, 0, top - fh);
-    grad.addColorStop(0, '#ff6b1a');
-    grad.addColorStop(0.6, '#ffb03a');
-    grad.addColorStop(1, 'rgba(255, 220, 120, 0)');
-    ctx.fillStyle = grad;
+  ctx.fillStyle = '#141210';
+  ctx.fillRect(-w * 0.48, -h * 0.16, w * 0.09, h * 0.2);
+  ctx.fillRect(w * 0.39, -h * 0.16, w * 0.09, h * 0.2);
+  // Damage dents.
+  if (opts.damage) {
+    ctx.strokeStyle = 'rgba(20, 14, 10, 0.7)';
+    ctx.lineWidth = Math.max(1, w * 0.008);
     ctx.beginPath();
-    ctx.moveTo(fx - w * 0.09, top + h * 0.3);
-    ctx.quadraticCurveTo(fx, top - fh, fx + w * 0.09, top + h * 0.3);
+    ctx.moveTo(-w * 0.3, -bodyH * 0.5);
+    ctx.lineTo(-w * 0.18, -bodyH * 0.62);
+    ctx.lineTo(-w * 0.08, -bodyH * 0.48);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Smoke wisp above a damaged car or a burning wreck. */
+export function drawSmoke(ctx, x, y, s, time) {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 3; i += 1) {
+    const drift = Math.sin(time * 1.4 + i * 2.1) * 8 * s;
+    const r = (10 + i * 9) * s;
+    ctx.fillStyle = i === 2 ? 'rgba(90, 80, 70, 0.5)' : 'rgba(120, 110, 100, 0.45)';
+    ctx.beginPath();
+    ctx.arc(x + drift, y - (14 + i * 16) * s, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Flames licking out of a burning wreck. */
+export function drawFlame(ctx, x, y, s, time) {
+  ctx.save();
+  for (let i = 0; i < 3; i += 1) {
+    const flick = Math.sin(time * 9 + i * 2.4) * 4 * s;
+    ctx.fillStyle = i === 0 ? '#ff9e2a' : i === 1 ? '#ff6a1a' : '#ffd94c';
+    ctx.beginPath();
+    ctx.moveTo(x - (16 - i * 4) * s, y);
+    ctx.quadraticCurveTo(x + flick, y - (34 - i * 7) * s, x + (16 - i * 4) * s, y);
     ctx.closePath();
     ctx.fill();
   }
-  // Smoke column, drifting up and left.
-  for (let s = 0; s < 4; s += 1) {
-    const st = ((time * 0.25 + s * 0.25) % 1);
-    ctx.fillStyle = `rgba(60, 55, 50, ${0.55 * (1 - st)})`;
-    ctx.beginPath();
-    ctx.arc(left + w * 0.5 - st * 40, top - st * 150, 14 + st * 26, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  ctx.restore();
+}
+
+/** A scooter with a rider, side view. */
+export function drawScooter(ctx, x, y, w, color) {
+  const h = w * 0.55;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(-w * 0.32, -h * 0.18, w * 0.16, 0, Math.PI * 2);
+  ctx.arc(w * 0.32, -h * 0.18, w * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1c1a18';
+  ctx.beginPath();
+  ctx.arc(-w * 0.32, -h * 0.18, w * 0.07, 0, Math.PI * 2);
+  ctx.arc(w * 0.32, -h * 0.18, w * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.fillRect(-w * 0.28, -h * 0.42, w * 0.6, h * 0.16);
+  ctx.fillStyle = '#e8e0d0';
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.85, w * 0.13, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3a4a5a';
+  ctx.fillRect(-w * 0.08, -h * 0.72, w * 0.16, h * 0.34);
+  ctx.restore();
+}
+
+/** A pedestrian: head, shirt, legs, walking. */
+export function drawPed(ctx, x, y, s, shirt, walk) {
+  const h = 34 * s + 8;
+  ctx.save();
+  ctx.translate(x, y);
+  const swing = Math.sin(walk) * 3 * s;
+  ctx.fillStyle = '#2a2118';
+  ctx.fillRect(-3 * s - swing, -h * 0.28, 3 * s, h * 0.28);
+  ctx.fillRect(swing, -h * 0.28, 3 * s, h * 0.28);
+  ctx.fillStyle = shirt;
+  ctx.fillRect(-6 * s, -h * 0.72, 12 * s, h * 0.46);
+  ctx.fillStyle = '#e8c9a0';
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.84, 5 * s + 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
