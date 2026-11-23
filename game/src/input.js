@@ -1,11 +1,10 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses
-// (start, pause, abilities) are queued as bit flags and taken once by the loop, so a
-// press between two frames is never lost and never counted twice.
-import { createRandom } from './random.js';
+// Keyboard and pointer input. Held keys give a steering direction and a throttle; one-shot
+// presses (start, pause, map) are queued as bit flags and taken once by the loop, so a press
+// between two frames is never lost and never counted twice.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
-export const ACTION_ABILITY = 4;
+export const ACTION_MAP = 4;
 
 const LEFT = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT = new Set(['ArrowRight', 'KeyD']);
@@ -13,7 +12,7 @@ const UP = new Set(['ArrowUp', 'KeyW']);
 const DOWN = new Set(['ArrowDown', 'KeyS']);
 const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
-const ABILITY = new Set(['KeyQ', 'KeyE', 'KeyR']);
+const MAP = new Set(['KeyM']);
 
 export function createInput(target) {
   let left = false;
@@ -31,8 +30,8 @@ export function createInput(target) {
       if (!event.repeat) actions |= ACTION_CONFIRM;
     } else if (PAUSE.has(event.code)) {
       if (!event.repeat) actions |= ACTION_PAUSE;
-    } else if (ABILITY.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_ABILITY;
+    } else if (MAP.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_MAP;
     } else return;
     event.preventDefault();
   });
@@ -55,10 +54,10 @@ export function createInput(target) {
 
   return {
     /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
+    steer() {
       return (right ? 1 : 0) - (left ? 1 : 0);
     },
-    /** -1 for brake/reverse, 1 for accelerate, 0 for neither. */
+    /** 1 for throttle, -1 for brake/reverse, 0 for coast. */
     throttle() {
       return (up ? 1 : 0) - (down ? 1 : 0);
     },
@@ -70,5 +69,3 @@ export function createInput(target) {
     },
   };
 }
-
-export { createRandom };

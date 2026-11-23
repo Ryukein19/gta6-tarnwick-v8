@@ -1,199 +1,225 @@
-// The city in real three.js: a golden-hour sky dome, a halo sun low on the horizon,
-// a dark road running into the distance, and 3D buildings on both sides — boxes with
-// real depth, so the camera sees front faces AND side faces, never flat rectangles.
-// Everything is placed from the seeded generator; the shot path never moves anything.
+// The city of Tarnwick as three.js geometry: a real street grid (roads every 40 units, blocks
+// between them), bright buildings with lit windows on every face, lamps, signs and market
+// stalls. The grid is the pause menu's map: viewed from above it reads as streets, districts
+// and blocks, not flat rectangles. All textures are canvas textures made at boot — no file
+// outside game/ is loaded.
+
 import * as THREE from 'three';
 import { PALETTE } from './config.js';
 
-/** A vertical gradient painted on a canvas, used as the sky texture. */
-function skyTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 4;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, PALETTE.skyTop);
-  grad.addColorStop(0.45, PALETTE.skyMid);
-  grad.addColorStop(0.72, '#c65a3a');
-  grad.addColorStop(0.88, PALETTE.skyHorizon);
-  grad.addColorStop(1, '#ffb347');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 4, 512);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+const BLOCK = 40; // the street grid pitch: roads every 40 units
 
-/** A radial glow painted on a canvas, used for the sun halo sprite. */
-function haloTexture() {
+/** A facade texture: a wall colour with a grid of warm lit windows. One texture per colour. */
+function facadeTexture(color, litRatio, random) {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
+  canvas.width = 128;
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
-  const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  grad.addColorStop(0, 'rgba(255, 225, 140, 0.95)');
-  grad.addColorStop(0.25, 'rgba(255, 179, 71, 0.55)');
-  grad.addColorStop(0.6, 'rgba(255, 140, 60, 0.18)');
-  grad.addColorStop(1, 'rgba(255, 140, 60, 0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 256, 256);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-/** Lit windows on the road-facing side and the street-facing (+Z) side of a building:
- * small warm planes, some dark. `side` is +1 for a right-hand building (road is -X)
- * and -1 for a left-hand building (road is +X). */
-function addWindows(group, random, w, h, d, side) {
-  const lit = new THREE.MeshBasicMaterial({ color: PALETTE.windowLit });
-  const dark = new THREE.MeshBasicMaterial({ color: PALETTE.windowDark });
-  const geo = new THREE.PlaneGeometry(1.1, 1.4);
-  // Road-facing side: the face toward x = 0.
-  const roadCols = Math.max(2, Math.floor(d / 2.2));
-  const roadRows = Math.max(3, Math.floor(h / 2.6));
-  for (let c = 0; c < roadCols; c += 1) {
-    for (let r = 0; r < roadRows; r += 1) {
-      if (random() < 0.22) continue;
-      const win = new THREE.Mesh(geo, random() < 0.75 ? lit : dark);
-      const u = (c + 0.5) / roadCols - 0.5;
-      const v = (r + 0.5) / roadRows - 0.5;
-      win.position.set(-side * (w / 2 + 0.03), v * (h - 1.6) + h / 2, u * (d - 1.4));
-      win.rotation.y = -side * Math.PI / 2;
-      group.add(win);
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 128, 256);
+  // Slight vertical shading so the wall is not flat.
+  const shade = ctx.createLinearGradient(0, 0, 0, 256);
+  shade.addColorStop(0, 'rgba(255,255,255,0.14)');
+  shade.addColorStop(1, 'rgba(0,0,0,0.12)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, 128, 256);
+  for (let row = 0; row < 8; row += 1) {
+    for (let col = 0; col < 4; col += 1) {
+      const lit = random() < litRatio;
+      ctx.fillStyle = lit ? PALETTE.windowLit : PALETTE.windowDark;
+      ctx.fillRect(10 + col * 30, 12 + row * 30, 18, 20);
+      if (lit) {
+        ctx.fillStyle = 'rgba(255,215,106,0.35)';
+        ctx.fillRect(10 + col * 30, 12 + row * 30, 18, 4);
+      }
     }
   }
-  // Street-facing side (+Z, toward the camera at the start of the street).
-  const frontCols = Math.max(2, Math.floor(w / 2.2));
-  const frontRows = Math.max(3, Math.floor(h / 2.6));
-  for (let c = 0; c < frontCols; c += 1) {
-    for (let r = 0; r < frontRows; r += 1) {
-      if (random() < 0.22) continue;
-      const win = new THREE.Mesh(geo, random() < 0.75 ? lit : dark);
-      const u = (c + 0.5) / frontCols - 0.5;
-      const v = (r + 0.5) / frontRows - 0.5;
-      win.position.set(u * (w - 1.4), v * (h - 1.6) + h / 2, d / 2 + 0.03);
-      group.add(win);
-    }
-  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
-export function buildCity(scene, random) {
-  // Warm dusk fog: the far end of the street melts into the horizon glow.
-  scene.fog = new THREE.Fog(new THREE.Color('#4a2c33'), 70, 220);
+/** A striped awning texture for the market stalls. */
+function awningTexture(colorA, colorB) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  for (let col = 0; col < 8; col += 1) {
+    ctx.fillStyle = col % 2 === 0 ? colorA : colorB;
+    ctx.fillRect(col * 16, 0, 16, 64);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
 
-  // Sky dome: a huge sphere, gradient texture, seen from inside.
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(320, 24, 16),
-    new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }),
-  );
-  scene.add(sky);
+/** A sign texture with big readable text on a bright board. */
+function signTexture(text, bg, fg) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 96;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 96);
+  ctx.fillStyle = fg;
+  ctx.font = 'bold 52px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 50);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
 
-  // The sun: a bright disc low on the horizon, dead ahead down the road.
-  const sun = new THREE.Mesh(
-    new THREE.CircleGeometry(5.5, 40),
-    new THREE.MeshBasicMaterial({ color: PALETTE.sunCore, fog: false }),
-  );
-  sun.position.set(-10, 11, -210);
-  scene.add(sun);
+function box(w, h, d, material, x, y, z) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
 
-  // The halo: a big soft additive glow around the sun — never a flat disc alone.
-  const halo = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: haloTexture(),
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      fog: false,
-      transparent: true,
-    }),
-  );
-  halo.scale.set(55, 55, 1);
-  halo.position.set(-10, 11, -205);
-  scene.add(halo);
+export function createCity(random) {
+  const group = new THREE.Group();
+  const mats = {
+    ground: new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 0.95 }),
+    road: new THREE.MeshStandardMaterial({ color: PALETTE.road, roughness: 0.9 }),
+    sidewalk: new THREE.MeshStandardMaterial({ color: PALETTE.sidewalk, roughness: 0.95 }),
+    line: new THREE.MeshBasicMaterial({ color: PALETTE.roadEdge }),
+  };
+  const facades = [
+    facadeTexture(PALETTE.buildingTan, 0.55, random),
+    facadeTexture(PALETTE.buildingPeach, 0.5, random),
+    facadeTexture(PALETTE.buildingBrick, 0.45, random),
+    facadeTexture(PALETTE.buildingSage, 0.5, random),
+    facadeTexture(PALETTE.buildingCream, 0.6, random),
+  ];
+  const buildingMats = facades.map((t) => new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 }));
+  const awningMat = new THREE.MeshStandardMaterial({ map: awningTexture(PALETTE.awningRed, PALETTE.awningCream), roughness: 0.8 });
+  const crateMat = new THREE.MeshStandardMaterial({ color: '#8a6a42', roughness: 0.95 });
+  const lampMat = new THREE.MeshStandardMaterial({ color: '#2a2e33', roughness: 0.6, metalness: 0.5 });
+  const lampGlow = new THREE.MeshBasicMaterial({ color: '#ffe9a8' });
 
-  // Lights: warm low sun from ahead-left, cool ambient fill from the sky.
-  const sunLight = new THREE.DirectionalLight(new THREE.Color('#ffb347'), 2.4);
-  sunLight.position.set(-30, 26, -90);
-  scene.add(sunLight);
-  // A warm fill from behind the camera: it lights the backs of the hero car, Renn
-  // and the street-facing building sides, which the low sun never reaches.
-  const fillLight = new THREE.DirectionalLight(new THREE.Color('#ff9a5c'), 1.2);
-  fillLight.position.set(12, 14, 40);
-  scene.add(fillLight);
-  scene.add(new THREE.HemisphereLight(new THREE.Color('#7a4a6e'), new THREE.Color('#241a20'), 1.1));
-  const fill = new THREE.AmbientLight(new THREE.Color('#5a3a55'), 0.85);
-  scene.add(fill);
+  // Ground and the main chase road (along -Z) plus cross streets (along X).
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(360, 360), mats.ground);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, -0.05, -80);
+  ground.receiveShadow = true;
+  group.add(ground);
 
-  // The road: a long dark plane running down -Z, with a pale centre line and edge lines.
-  const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(13, 260),
-    new THREE.MeshLambertMaterial({ color: PALETTE.road }),
-  );
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(14, 300), mats.road);
   road.rotation.x = -Math.PI / 2;
-  road.position.set(0, 0, -110);
-  scene.add(road);
-
-  const lineMat = new THREE.MeshBasicMaterial({ color: PALETTE.roadLine });
-  for (let z = 10; z > -240; z -= 9) {
-    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 3.4), lineMat);
-    dash.rotation.x = -Math.PI / 2;
-    dash.position.set(0, 0.02, z);
-    scene.add(dash);
+  road.position.set(0, 0, -80);
+  road.receiveShadow = true;
+  group.add(road);
+  for (const z of [-40, -80, -120, -160]) {
+    const cross = new THREE.Mesh(new THREE.PlaneGeometry(200, 12), mats.road);
+    cross.rotation.x = -Math.PI / 2;
+    cross.position.set(0, 0.01, z);
+    cross.receiveShadow = true;
+    group.add(cross);
   }
-  for (const x of [-6.2, 6.2]) {
-    const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 260), lineMat);
-    edge.rotation.x = -Math.PI / 2;
-    edge.position.set(x, 0.02, -110);
-    scene.add(edge);
+  // Sidewalks flanking the chase road.
+  for (const side of [-1, 1]) {
+    const walk = new THREE.Mesh(new THREE.PlaneGeometry(5, 300), mats.sidewalk);
+    walk.rotation.x = -Math.PI / 2;
+    walk.position.set(side * 9.5, 0.02, -80);
+    walk.receiveShadow = true;
+    group.add(walk);
+  }
+  // Lane markings: a dashed centre line and solid edges down the chase road.
+  for (let z = 8; z > -220; z -= 8) {
+    group.add(box(0.35, 0.02, 3.2, mats.line, 0, 0.03, z));
+  }
+  for (const side of [-1, 1]) {
+    group.add(box(0.3, 0.02, 300, mats.line, side * 6.8, 0.03, -80));
+  }
+  // A crosswalk where the chase begins.
+  for (let x = -6; x <= 6; x += 2) {
+    group.add(box(1.2, 0.02, 2.4, mats.line, x, 0.03, 4));
   }
 
-  // Sidewalks: raised strips along both sides of the road.
-  const walkMat = new THREE.MeshLambertMaterial({ color: PALETTE.sidewalk });
-  for (const x of [-8.4, 8.4]) {
-    const walk = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.24, 260), walkMat);
-    walk.position.set(x, 0.12, -110);
-    scene.add(walk);
-  }
-
-  // Buildings: real boxes with depth, varied heights, warm-lit faces on the sun side
-  // and deep shade on the other — the camera sees front AND side faces.
-  const warm = new THREE.MeshLambertMaterial({ color: PALETTE.buildingWarm });
-  const shade = new THREE.MeshLambertMaterial({ color: PALETTE.buildingShade });
-  const dark = new THREE.MeshLambertMaterial({ color: PALETTE.buildingDark });
-  const mats = [warm, shade, dark];
-  let z = 14;
-  while (z > -230) {
-    for (const side of [-1, 1]) {
-      if (random() < 0.12) continue;
-      const w = 6 + random() * 7;
-      const h = 9 + random() * 20;
-      const d = 7 + random() * 9;
-      const x = side * (11.5 + w / 2 + random() * 2);
-      const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats[Math.floor(random() * mats.length)]);
-      box.position.set(x, h / 2, z - d / 2);
-      scene.add(box);
-      // Windows on the road-facing side and on the street-facing side.
-      const group = new THREE.Group();
-      group.position.copy(box.position);
-      group.position.y = 0;
-      addWindows(group, random, w, h, d, side);
-      scene.add(group);
+  // Buildings fill the blocks between the roads. Each block holds 2-4 bright towers; their
+  // facades carry lit windows on every face, so the depth reads from any angle.
+  const blocks = [];
+  for (let bx = -3; bx <= 2; bx += 1) {
+    for (let bz = 0; bz >= -4; bz -= 1) {
+      if (bx === -1 || bx === 0) continue; // the chase road runs here
+      const cx = bx * BLOCK + (bx < 0 ? -8 : 8);
+      const cz = bz * BLOCK - 20;
+      const count = 2 + Math.floor(random() * 3);
+      for (let i = 0; i < count; i += 1) {
+        const w = 10 + random() * 8;
+        const d = 10 + random() * 8;
+        const h = 9 + random() * 22;
+        const x = cx + (random() - 0.5) * 12;
+        const z = cz + (random() - 0.5) * 12;
+        const mat = buildingMats[Math.floor(random() * buildingMats.length)];
+        const b = box(w, h, d, mat, x, h / 2, z);
+        group.add(b);
+        blocks.push({ x, z, w, d, h });
+      }
     }
-    z -= 12 + random() * 8;
   }
 
-  // Streetlights: thin poles with a warm lamp head, down both sides.
-  const poleMat = new THREE.MeshLambertMaterial({ color: '#1a1a22' });
-  const lampMat = new THREE.MeshBasicMaterial({ color: PALETTE.headLight });
-  for (let i = 0; i < 10; i += 1) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 6.4, 8), poleMat);
-    pole.position.set(side * 7.4, 3.2, 8 - i * 24);
-    scene.add(pole);
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), lampMat);
-    lamp.position.set(side * 7.1, 6.5, 8 - i * 24);
-    scene.add(lamp);
+  // Street lamps along the chase road, warm and lit.
+  for (let z = 6; z > -200; z -= 24) {
+    for (const side of [-1, 1]) {
+      const pole = box(0.25, 6, 0.25, lampMat, side * 8.2, 3, z);
+      group.add(pole);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), lampGlow);
+      head.position.set(side * 8.2, 6.2, z);
+      group.add(head);
+    }
   }
 
-  return { sun, halo };
+  // Big readable signs over the road and the market.
+  const signDefs = [
+    { text: 'TARNWICK', x: 0, y: 11, z: -30, w: 18 },
+    { text: 'HARBOUR  ·  420 m', x: 0, y: 10, z: -90, w: 18 },
+    { text: 'MARKET ROW', x: -30, y: 8, z: -58, w: 14 },
+  ];
+  for (const def of signDefs) {
+    const mat = new THREE.MeshBasicMaterial({ map: signTexture(def.text, '#241a20', '#f2c94c') });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(def.w, def.w * 0.19), mat);
+    sign.position.set(def.x, def.y, def.z);
+    group.add(sign);
+    for (const side of [-1, 1]) {
+      group.add(box(0.3, def.y, 0.3, lampMat, def.x + (side * def.w) / 2, def.y / 2, def.z));
+    }
+  }
+
+  // The night market: striped stalls, crates and lanterns on the west sidewalk (x ≈ -14),
+  // where the on-foot shot is staged.
+  const stalls = [];
+  for (let i = 0; i < 5; i += 1) {
+    const z = -46 - i * 9;
+    const stall = new THREE.Group();
+    const counter = box(4.4, 1.1, 2.2, crateMat, 0, 0.55, 0);
+    stall.add(counter);
+    const awn = new THREE.Mesh(new THREE.BoxGeometry(5, 0.25, 3), awningMat);
+    awn.position.set(0, 2.6, 0);
+    awn.rotation.x = 0.25;
+    awn.castShadow = true;
+    stall.add(awn);
+    for (const px of [-2, 2]) {
+      stall.add(box(0.18, 2.6, 0.18, lampMat, px, 1.3, -1.2));
+    }
+    // Goods on the counter: bright fruit crates.
+    const goods = new THREE.Mesh(
+      new THREE.BoxGeometry(3.6, 0.5, 1.6),
+      new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? '#e5484d' : '#f2c94c', roughness: 0.8 }),
+    );
+    goods.position.set(0, 1.35, 0);
+    stall.add(goods);
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), lampGlow);
+    lantern.position.set(0, 3.1, 0.6);
+    stall.add(lantern);
+    stall.position.set(-14, 0, z);
+    group.add(stall);
+    stalls.push(stall);
+  }
+
+  return { group, blocks, stalls };
 }

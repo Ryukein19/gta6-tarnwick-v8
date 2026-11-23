@@ -1,102 +1,107 @@
-// The pause-menu map: a street grid over Tarnwick's five districts, each block tinted
-// by turf, with the player's position, the mission marker and a gold route arrow
-// between them. Built as one inline SVG so it stays crisp at any size.
-import { DISTRICTS, MISSIONS } from './config.js';
+// The pause-menu map: the real city viewed from above (a top-down orthographic camera over
+// the actual street grid) plus DOM district labels projected through that camera and a gold
+// dashed route from Renn to the safehouse. The map is the city itself, not flat rectangles —
+// the street grid is the roads and blocks city.js built.
 
-/** The map's street grid: 5 columns by 4 rows of blocks, each one a district. */
-const GRID = [
-  ['Northside', 'Northside', 'Old Town', 'Old Town', 'Market Row'],
-  ['Northside', 'Harbour', 'Old Town', 'Market Row', 'Market Row'],
-  ['The Docks', 'Harbour', 'Harbour', 'Old Town', 'Market Row'],
-  ['The Docks', 'The Docks', 'Harbour', 'Harbour', 'Old Town'],
+import * as THREE from 'three';
+import { DISTRICTS } from './config.js';
+
+// District centres in world coordinates (matching the blocks city.js lays out).
+const DISTRICT_CENTRES = [
+  { name: 'NORTHSIDE', owner: 'GREYLINE', color: '#8a7f8a', x: 0, z: -168 },
+  { name: 'OLD TOWN', owner: 'KOVACS', color: '#f2c94c', x: -62, z: -28 },
+  { name: 'MARKET ROW', owner: 'KOVACS', color: '#3aa88f', x: -16, z: -58 },
+  { name: 'HARBOUR', owner: 'KOVACS', color: '#4a90d9', x: 62, z: -28 },
+  { name: 'THE DOCKS', owner: 'CONTESTED', color: '#e5484d', x: 35, z: -140 },
 ];
 
-const W = 640;
-const H = 420;
-const COLS = 5;
-const ROWS = 4;
-const CW = W / COLS;
-const CH = H / ROWS;
-
-function districtColor(name) {
-  const found = DISTRICTS.find((d) => d.name === name);
-  return found ? found.color : '#3a2f4a';
-}
-
-export function buildPauseMap() {
-  let blocks = '';
-  for (let r = 0; r < ROWS; r += 1) {
-    for (let c = 0; c < COLS; c += 1) {
-      const name = GRID[r][c];
-      blocks += '<rect x="' + (c * CW + 5) + '" y="' + (r * CH + 5) + '" width="' + (CW - 10) + '" height="' + (CH - 10)
-        + '" fill="' + districtColor(name) + '" fill-opacity="0.32" stroke="' + districtColor(name)
-        + '" stroke-opacity="0.7" stroke-width="1.5" rx="4"/>';
-    }
-  }
-  // District labels, one per district, at the centre of its biggest block.
-  const labels = [
-    { name: 'NORTHSIDE', x: 1.0 * CW, y: 0.5 * CH, turf: 'GREYLINE' },
-    { name: 'OLD TOWN', x: 3.0 * CW, y: 0.5 * CH, turf: 'KOVACS' },
-    { name: 'HARBOUR', x: 2.0 * CW, y: 2.5 * CH, turf: 'KOVACS' },
-    { name: 'THE DOCKS', x: 0.5 * CW, y: 3.5 * CH, turf: 'CONTESTED' },
-    { name: 'MARKET ROW', x: 4.0 * CW, y: 1.5 * CH, turf: 'KOVACS' },
+export function createMap(scene) {
+  // The gold route to the safehouse: a flat ribbon laid on the road, Renn's position to the
+  // harbour. A line would render 1px wide; the ribbon reads from the top-down map.
+  const routePoints = [
+    new THREE.Vector3(0, 0.6, 0),
+    new THREE.Vector3(0, 0.6, -40),
+    new THREE.Vector3(20, 0.6, -60),
+    new THREE.Vector3(48, 0.6, -60),
+    new THREE.Vector3(62, 0.6, -40),
   ];
-  let labelSvg = '';
-  for (const label of labels) {
-    labelSvg += '<text x="' + label.x + '" y="' + (label.y - 4) + '" fill="#f2ead8" font-size="15" font-weight="bold" text-anchor="middle">' + label.name + '</text>'
-      + '<text x="' + label.x + '" y="' + (label.y + 14) + '" fill="#b8a888" font-size="11" text-anchor="middle">' + label.turf + '</text>';
+  const route = new THREE.Group();
+  const routeMat = new THREE.MeshBasicMaterial({ color: 0xf2c94c });
+  for (let i = 0; i < routePoints.length - 1; i += 1) {
+    const a = routePoints[i];
+    const b = routePoints[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dz);
+    const seg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, len), routeMat);
+    seg.rotation.x = -Math.PI / 2;
+    seg.rotation.z = Math.atan2(dx, dz);
+    seg.position.set((a.x + b.x) / 2, 0.6, (a.z + b.z) / 2);
+    route.add(seg);
   }
-  // The route: player at the Harbour gate, mission at the Old Town safehouse.
-  const px = 1.6 * CW;
-  const py = 2.7 * CH;
-  const mx = 3.4 * CW;
-  const my = 0.8 * CH;
-  const route = '<defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">'
-    + '<path d="M0,0 L10,4 L0,8 z" fill="#ffd76a"/></marker></defs>'
-    + '<polyline points="' + px + ',' + py + ' ' + (px + 60) + ',' + (py - 70) + ' ' + (mx - 40) + ',' + (my + 50) + ' ' + mx + ',' + my
-    + '" fill="none" stroke="#ffd76a" stroke-width="4" stroke-dasharray="12 6" marker-end="url(#arrow)"/>';
-  const markers = '<circle cx="' + px + '" cy="' + py + '" r="9" fill="#7ddb8a" stroke="#0c0f14" stroke-width="2"/>'
-    + '<text x="' + px + '" y="' + (py + 26) + '" fill="#7ddb8a" font-size="12" font-weight="bold" text-anchor="middle">RENN</text>'
-    + '<path d="M' + mx + ',' + (my - 12) + ' l4,9 h-8 z" fill="#ff4d4d" stroke="#0c0f14" stroke-width="1.5"/>'
-    + '<circle cx="' + mx + '" cy="' + (my - 12) + '" r="4" fill="#ff4d4d" stroke="#0c0f14" stroke-width="1.5"/>'
-    + '<text x="' + (mx + 12) + '" y="' + (my - 8) + '" fill="#ff4d4d" font-size="12" font-weight="bold">SAFEHOUSE</text>';
-  return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="100%">'
-    + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#14101c"/>'
-    + blocks + route + markers + labelSvg + '</svg>';
+  // Dashed feel: gold chevrons at each waypoint.
+  for (const p of routePoints) {
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(1.1, 16), routeMat);
+    dot.rotation.x = -Math.PI / 2;
+    dot.position.set(p.x, 0.62, p.z);
+    route.add(dot);
+  }
+  scene.add(route);
+
+  // "YOU" marker: a bright orange cone at Renn's spot, pointing down the road.
+  const you = new THREE.Mesh(
+    new THREE.ConeGeometry(2.2, 5, 4),
+    new THREE.MeshBasicMaterial({ color: 0xff6a00 }),
+  );
+  you.rotation.x = Math.PI / 2;
+  you.rotation.y = Math.PI / 4;
+  you.position.set(0, 1.2, 0);
+  scene.add(you);
+
+  // Safehouse marker: a gold ring at the harbour.
+  const safe = new THREE.Mesh(
+    new THREE.TorusGeometry(3, 0.5, 10, 28),
+    new THREE.MeshBasicMaterial({ color: 0xf2c94c }),
+  );
+  safe.rotation.x = Math.PI / 2;
+  safe.position.set(62, 0.8, -40);
+  scene.add(safe);
+
+  return { route, you, safe };
 }
 
-/** The pause overlay's HTML: map on the left, missions and controls on the right. */
-export function pauseOverlayHtml(state) {
-  let missionRows = '';
-  for (const mission of MISSIONS) {
-    const cls = mission.status === 'ACTIVE' ? 'mission-active' : mission.status === 'DONE' ? 'mission-done' : 'mission-locked';
-    missionRows += '<div class="mission-row ' + cls + '"><span class="mission-act">' + mission.act + '</span>'
-      + '<span class="mission-name">' + mission.name + '</span>'
-      + '<span class="mission-status">' + mission.status + '</span></div>';
+/** Position the DOM district labels over the top-down map camera. */
+export function layoutMapLabels(hud, camera) {
+  const labels = hud.labels;
+  labels.innerHTML = '';
+  // The camera is not in the scene, so its matrices are only refreshed when it renders:
+  // update them here or every projection lands at the wrong place.
+  camera.updateMatrixWorld();
+  const v = new THREE.Vector3();
+  for (const d of DISTRICT_CENTRES) {
+    v.set(d.x, 0, d.z).project(camera);
+    const x = (v.x * 0.5 + 0.5) * 1280;
+    const y = (-v.y * 0.5 + 0.5) * 720;
+    const label = document.createElement('div');
+    label.style.cssText = `position:absolute; left:${x}px; top:${y}px; transform:translate(-50%,-50%); text-align:center;`;
+    label.innerHTML = `<div style="font-size:15px; font-weight:800; letter-spacing:1px; text-shadow:0 1px 4px rgba(0,0,0,0.8);">${d.name}</div>
+      <div style="font-size:11px; font-weight:700; color:${d.color}; text-shadow:0 1px 4px rgba(0,0,0,0.8);">${d.owner}</div>`;
+    labels.appendChild(label);
   }
-  return '<div class="pause-wrap">'
-    + '<div class="pause-left"><div class="hud-panel-title">TARNWICK — STREET MAP</div>'
-    + '<div class="pause-map">' + buildPauseMap() + '</div>'
-    + '<div class="pause-activities">ACTIVITIES — Harbour races · Docks smuggling · Market Row dead drops · Talk 1210 call-ins</div></div>'
-    + '<div class="pause-right"><div class="hud-panel-title">PAUSED — ' + state.mission.name.toUpperCase() + '</div>'
-    + '<div class="pause-missions">' + missionRows + '</div>'
-    + '<div class="pause-stats">DAY ' + state.day + ' · ' + state.clock + ' &nbsp;·&nbsp; ' + '$' + state.money.toLocaleString('en-US')
-    + ' &nbsp;·&nbsp; ' + state.rankName + ' ' + state.rankPoints + '/' + state.rankNext + ' RP</div>'
-    + '<div class="pause-controls">W A S D DRIVE &nbsp;·&nbsp; SPACE HANDBRAKE &nbsp;·&nbsp; Q E R ABILITIES &nbsp;·&nbsp; P RESUME &nbsp;·&nbsp; ESC QUIT TO TITLE</div>'
-    + '<div class="pause-prompt">Press P to resume</div></div>'
-    + '</div>';
+  // "YOU" and "SAFEHOUSE" tags beside their markers.
+  const tags = [
+    { text: 'RENN', x: 0, z: 8, color: '#ff6a00' },
+    { text: 'SAFEHOUSE', x: 62, z: -30, color: '#f2c94c' },
+  ];
+  for (const t of tags) {
+    v.set(t.x, 0, t.z).project(camera);
+    const x = (v.x * 0.5 + 0.5) * 1280;
+    const y = (-v.y * 0.5 + 0.5) * 720;
+    const label = document.createElement('div');
+    label.style.cssText = `position:absolute; left:${x}px; top:${y}px; transform:translate(-50%,-50%); font-size:12px; font-weight:800; color:${t.color}; text-shadow:0 1px 4px rgba(0,0,0,0.9);`;
+    label.textContent = t.text;
+    labels.appendChild(label);
+  }
 }
 
-/** The title overlay's HTML: the big name, the tagline, the menu. */
-export function titleOverlayHtml() {
-  return '<div class="title-wrap">'
-    + '<div class="title-kicker">A TARNWICK STORY</div>'
-    + '<div class="title-name">TARNWICK</div>'
-    + '<div class="title-tag">COME HOME</div>'
-    + '<div class="title-sub">Renn Kovacs is back after six years. His brother Tam is gone. '
-    + 'The harbour remembers everything.</div>'
-    + '<div class="title-menu"><div class="title-item title-item-active">CONTINUE — THE LONG WAY HOME</div>'
-    + '<div class="title-item">NEW GAME</div><div class="title-item">MISSIONS</div><div class="title-item">SETTINGS</div></div>'
-    + '<div class="title-foot">WAVE 97.9 · HARBOUR 101.2 · TARNWICK TALK 1210 &nbsp;&nbsp;|&nbsp;&nbsp; PRESS SPACE TO START</div>'
-    + '</div>';
-}
+export { DISTRICTS };

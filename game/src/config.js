@@ -1,118 +1,133 @@
-// Tarnwick v9 — every tuning number, colour and story fact in one place.
-// The playfield is a fixed 1280x720 logical area; the three.js camera frames it, and the
-// DOM HUD lays over it, so no rule below depends on the window size.
+// Every tuning number, colour and story fact in one place. Tarnwick v10 ("v9-fixed") is a
+// BRIGHT golden-hour chase: warm orange sky, light road, light buildings, a BRIGHT ORANGE hero
+// car and a WHITE helicopter. Nothing important is allowed to render black — the lights in
+// render.js carry a strong fill from the camera so the car and heli stay readable at 300px.
 
 export const FIELD = { width: 1280, height: 720 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
 export const STEP = 1 / 60;
-
-/** The fixed scene time, in seconds, every screenshot is staged at: shots never move. */
-export const SHOT_TIME = 1.5;
-
-/** Golden-hour palette: warm low sun, dark road, lit windows. Never purple dusk. */
-export const PALETTE = {
-  skyTop: '#2e2450',
-  skyMid: '#8a4438',
-  skyHorizon: '#ff9a3c',
-  sunCore: '#ffd76a',
-  sunHalo: '#ffb347',
-  road: '#221a15',
-  roadLine: '#e8d9a0',
-  sidewalk: '#3a2f28',
-  buildingWarm: '#b0703a',
-  buildingShade: '#5a4460',
-  buildingDark: '#3d2f4a',
-  windowLit: '#ffcf6e',
-  windowDark: '#241a2e',
-  carBody: '#2e3238',
-  carAccent: '#c9a227',
-  tailLight: '#ff2e2e',
-  headLight: '#fff3c4',
-  heliBody: '#1d2733',
-  cone: '#ffffff',
-  panel: 'rgba(12, 10, 18, 0.82)',
-  panelEdge: '#c9a227',
-  text: '#f2ead8',
-  muted: '#b8a888',
-  gold: '#ffd76a',
-  red: '#ff4d4d',
-  green: '#7ddb8a',
-};
-
-/** Where the best score is kept between visits (this browser only). */
 export const BEST_KEY = 'tarnwick.best';
 
-export const STORY = {
-  title: 'TARNWICK',
-  tagline: 'COME HOME',
-  hero: 'Renn Kovacs',
-  brother: 'Tam Kovacs',
-  sister: 'Sena Kovacs',
-  fixer: 'Uncle Bram',
-  antagonist: 'Capt. Elias Dray',
-  rival: 'GREYLINE',
-  car: 'FALCON GT',
-  carNote: "Tam's car",
+// The shot clock: every staged screenshot is taken at this fixed world time, so re-renders
+// are byte-identical.
+export const SHOT_TIME = 1.5;
+
+export const GAME = {
+  money: 24600,
+  stars: 4,
+  wanted: 'IN SIGHT',
+  timerSeconds: 107, // 1:47
+  day: 6,
+  clock: '18:47',
+  rank: 840,
+  rankMax: 1200,
+  rankTitle: 'STREET',
+  health: 100,
+  armour: 65,
+  speedKmh: 111,
+  carName: 'FALCON GT',
+  carCondition: 100,
+  mission: 'THE LONG WAY HOME',
+  missionAct: 'ACT IV — THE LONG WAY HOME',
+  plate: 'TAM-6',
 };
 
-export const RADIO = [
-  { name: 'WAVE 97.9', line: 'Golden hour on WAVE 97.9 — the harbour never sounded this good.' },
-  { name: 'HARBOUR 101.2', line: 'Harbour 101.2 — traffic, tides and the night shift.' },
-  { name: 'TARNWICK TALK 1210', line: 'Tarnwick Talk 1210 — call in, the lines are open.' },
-];
-
-/** The 8 missions, 5-act arc. Names and order are fixed. */
-export const MISSIONS = [
-  { act: 'ACT I', name: 'Six Years Gone', status: 'DONE' },
-  { act: 'ACT I', name: "Tam's Last Run", status: 'DONE' },
-  { act: 'ACT II', name: 'The Harbour Gate', status: 'DONE' },
-  { act: 'ACT II', name: 'Sena’s Dead Drop', status: 'DONE' },
-  { act: 'ACT III', name: 'Bram’s Fix', status: 'DONE' },
-  { act: 'ACT III', name: 'The Long Way Home', status: 'ACTIVE' },
-  { act: 'ACT IV', name: 'Greyline Rising', status: 'LOCKED' },
-  { act: 'ACT V', name: 'Come Home', status: 'LOCKED' },
-];
-
 export const CREW = [
-  { initials: 'SK', name: 'Sena Kovacs', role: 'Dead Drop', key: 'Q', cooldown: 'READY', ability: 'DEAD DROP' },
-  { initials: 'UB', name: 'Uncle Bram', role: 'Fixer Call', key: 'E', cooldown: '12S', ability: 'FIXER CALL' },
-  { initials: 'MV', name: 'Mara Voss', role: 'Lookout', key: 'R', cooldown: '30S', ability: 'LOOKOUT' },
+  { name: 'RENN KOVACS', role: 'DRIVER · YOU', color: '#ff6a00', initial: 'RK' },
+  { name: 'SENA KOVACS', role: 'SISTER · LOOKOUT', color: '#e5488a', initial: 'SK' },
+  { name: 'UNCLE BRAM', role: 'FIXER', color: '#4a90d9', initial: 'UB' },
+  { name: 'MAMA ODELLE', role: 'MARKET · FENCE', color: '#3aa88f', initial: 'MO' },
+];
+
+export const ABILITIES = [
+  { key: 'SK', name: 'DEAD DROP', keyCap: 'Q', state: 'READY', stateClass: 'ready' },
+  { key: 'UB', name: 'FIXER CALL', keyCap: 'E', state: '12S', stateClass: 'cool' },
+  { key: 'MV', name: 'LOOKOUT', keyCap: 'R', state: '30S', stateClass: 'cool' },
 ];
 
 export const DISPATCH = [
-  { unit: 'UNIT 04', call: 'Harbour', tactic: 'PIT MANEUVER' },
-  { unit: 'UNIT 07', call: 'Northside', tactic: 'BOX IN' },
-  { unit: 'UNIT 11', call: 'Old Town', tactic: 'ROADBLOCK' },
-  { unit: 'UNIT 13', call: 'The Docks', tactic: 'PIT MANEUVER' },
-  { unit: 'UNIT 19', call: 'Market Row', tactic: 'BOX IN' },
-  { unit: 'UNIT 22', call: 'Greyline', tactic: 'PURSUIT' },
-  { unit: 'HELI 1', call: 'Air Support', tactic: 'SPOTLIGHT' },
+  { unit: 'CONDOR-1', tactic: 'AIR SPOTLIGHT OVERHEAD' },
+  { unit: 'SIERRA-12', tactic: 'RAM' },
+  { unit: 'TANGO-7', tactic: 'PURSUE' },
+  { unit: 'SIERRA-04', tactic: 'PIT MANEUVER' },
+  { unit: 'VICTOR-9', tactic: 'BOX IN' },
+  { unit: 'KILO-2', tactic: 'ROADBLOCK HARBOUR' },
+  { unit: 'ECHO-5', tactic: 'CORDON MARKET ROW' },
 ];
 
 export const WEAPONS = [
-  { name: 'AR-9', slots: 3, locked: false },
-  { name: 'RPG', slots: 1, locked: true },
-  { name: 'PISTOL', slots: 2, locked: false },
+  { slot: 1, name: 'FISTS', ammo: '—', locked: false },
+  { slot: 2, name: '.38', ammo: '60', locked: false },
+  { slot: 3, name: 'SMG', ammo: '120', locked: false },
+  { slot: 4, name: 'AR-9', ammo: 'LOCKED', locked: true },
+  { slot: 5, name: 'RPG', ammo: 'LOCKED', locked: true },
+];
+
+export const MISSIONS = [
+  { act: 'ACT I', name: 'HOMECOMING', state: 'DONE' },
+  { act: 'ACT I', name: 'THE FALCON GT', state: 'DONE' },
+  { act: 'ACT II', name: 'HARBOUR LIGHTS', state: 'DONE' },
+  { act: 'ACT III', name: 'GREYLINE DEBT', state: 'DONE' },
+  { act: 'ACT IV', name: 'THE LONG WAY HOME', state: 'ACTIVE' },
+  { act: 'ACT IV', name: 'DRAY’S NET', state: 'LOCKED' },
+  { act: 'ACT V', name: 'SAFEHOUSE', state: 'LOCKED' },
+  { act: 'ACT V', name: 'COME HOME', state: 'LOCKED' },
 ];
 
 export const DISTRICTS = [
-  { name: 'Harbour', color: '#c9a227', turf: 'KOVACS' },
-  { name: 'Old Town', color: '#2e8b8b', turf: 'KOVACS' },
-  { name: 'Northside', color: '#7a4a9e', turf: 'GREYLINE' },
-  { name: 'The Docks', color: '#b0703a', turf: 'CONTESTED' },
-  { name: 'Market Row', color: '#4a7a3a', turf: 'KOVACS' },
+  { name: 'NORTHSIDE', owner: 'GREYLINE', color: '#8a7f8a' },
+  { name: 'OLD TOWN', owner: 'KOVACS', color: '#f2c94c' },
+  { name: 'MARKET ROW', owner: 'KOVACS', color: '#3aa88f' },
+  { name: 'HARBOUR', owner: 'KOVACS', color: '#4a90d9' },
+  { name: 'THE DOCKS', owner: 'CONTESTED', color: '#e5484d' },
 ];
 
-export const HUD = {
-  money: 24600,
-  day: 6,
-  clock: '18:47',
-  timerSeconds: 107,
-  rankPoints: 840,
-  rankNext: 1200,
-  rankName: 'STREET',
-  wanted: 3,
-  health: 100,
-  armour: 65,
+export const RADIO = [
+  { station: 'WAVE 97.9', line: 'Golden hour on WAVE 97.9 — Tarnwick’s own' },
+  { station: 'HARBOUR 101.2', line: 'Harbour 101.2 — the docks never sleep' },
+  { station: 'TALK 1210', line: 'Tarnwick Talk 1210 — who killed Tam Kovacs?' },
+];
+
+export const DIALOGUE = {
+  cover: { who: 'SENA', text: 'Renn, the harbour gate closes at midnight. Don’t stop for anyone.' },
+  foot: { who: 'MAMA ODELLE', text: 'The heli can’t follow you through the market, boy. Run the stalls.' },
 };
+
+// BRIGHT golden-hour palette. The road is a warm mid-grey (never black), the buildings are light
+// tan/peach/cream, the sky is orange-pink at the horizon to soft blue above.
+export const PALETTE = {
+  skyTop: '#6fb7e8',
+  skyMid: '#ffb38a',
+  skyHorizon: '#ff8c42',
+  fog: '#ffbe8e',
+  sunCore: '#fff3c4',
+  sunHalo: '#ffcf7d',
+  road: '#7a7268',
+  roadEdge: '#f7ead0',
+  sidewalk: '#cbb89a',
+  ground: '#b99a72',
+  buildingTan: '#f2d8a7',
+  buildingPeach: '#e8b48a',
+  buildingBrick: '#d98a6a',
+  buildingSage: '#a8c8b8',
+  buildingCream: '#f7e8c8',
+  windowLit: '#ffd76a',
+  windowDark: '#5a4a3a',
+  carOrange: '#ff6a00',
+  carGold: '#f2c94c',
+  heliWhite: '#e8ecef',
+  heliGrey: '#c8ccd0',
+  policeWhite: '#f2f2f2',
+  policeBlack: '#2a2e33',
+  trafficRed: '#e5484d',
+  trafficBlue: '#4a90d9',
+  trafficYellow: '#f2c94c',
+  trafficTeal: '#3aa88f',
+  trafficWhite: '#f2f2f2',
+  awningRed: '#d94f3d',
+  awningCream: '#f7e8c8',
+  text: '#f5efe4',
+  muted: '#cbb89a',
+  gold: '#f2c94c',
+};
+
+export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';

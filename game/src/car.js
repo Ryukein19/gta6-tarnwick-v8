@@ -1,131 +1,119 @@
-// The cars in real three.js. The FALCON GT — Tam's car — is a low, wide coupe built
-// from boxes, cylinders and emissive strips: a full-width tail-light bar, a rear spoiler,
-// gold side stripes and real wheels with hubs. Traffic cars are simpler boxes with the
-// same bones, so the street reads as one fleet. Every car faces -Z, down the road.
-import * as THREE from 'three';
-import { PALETTE } from './config.js';
+// Vehicles as three.js geometry. The hero car is the whole point of the cover, so it is built
+// to read at 300px: BRIGHT ORANGE body, gold stripe, a red tail-light bar, a spoiler, light
+// rims and a readable plate. The paint is a bright standard material — with the scene's fill
+// light it stays orange from every angle, never a black silhouette.
 
-function wheel(radius, width) {
-  const group = new THREE.Group();
-  const tyre = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, width, 18),
-    new THREE.MeshLambertMaterial({ color: '#0c0c0e' }),
-  );
-  tyre.rotation.z = Math.PI / 2;
-  group.add(tyre);
-  const hub = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius * 0.55, radius * 0.55, width + 0.04, 12),
-    new THREE.MeshLambertMaterial({ color: '#c8c8d0' }),
-  );
-  hub.rotation.z = Math.PI / 2;
-  group.add(hub);
-  return group;
+import * as THREE from 'three';
+import { PALETTE, GAME } from './config.js';
+
+function plateTexture(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f5efe4';
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = '#1a1a22';
+  ctx.font = 'bold 44px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 34);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
-/** The hero car: the FALCON GT, Tam's car. Built once, posed by the caller. */
-export function buildHeroCar() {
-  const car = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color: PALETTE.carBody });
-  const glassMat = new THREE.MeshLambertMaterial({ color: '#0e1620' });
-  const accentMat = new THREE.MeshBasicMaterial({ color: PALETTE.carAccent });
+function box(w, h, d, material, x, y, z) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  return mesh;
+}
 
-  // Main body: low and wide.
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.55, 4.6), bodyMat);
-  body.position.y = 0.62;
-  car.add(body);
-  // Nose: a lower wedge at the front (-Z).
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.34, 0.9), bodyMat);
-  nose.position.set(0, 0.5, -2.5);
-  car.add(nose);
-  // Cabin: set back, dark glass, slightly narrower.
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 2.1), glassMat);
-  cabin.position.set(0, 1.12, 0.35);
-  car.add(cabin);
-  // Roof panel over the cabin.
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.9), bodyMat);
-  roof.position.set(0, 1.4, 0.35);
-  car.add(roof);
-  // Rear spoiler on two struts.
-  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.07, 0.42), bodyMat);
-  spoiler.position.set(0, 1.28, 2.15);
-  car.add(spoiler);
-  for (const x of [-0.7, 0.7]) {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), bodyMat);
-    strut.position.set(x, 1.1, 2.15);
-    car.add(strut);
-  }
-  // Gold side stripes: the car's signature.
-  for (const x of [-1.01, 1.01]) {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.1, 4.2), accentMat);
-    stripe.position.set(x, 0.62, 0);
-    car.add(stripe);
-  }
-  // Full-width tail-light bar at the rear (+Z is the rear: the camera sees it).
-  const tail = new THREE.Mesh(
-    new THREE.BoxGeometry(1.8, 0.14, 0.06),
-    new THREE.MeshBasicMaterial({ color: PALETTE.tailLight }),
+/** The Falcon GT — Tam's car, Renn's car. Bright orange, 3/4 rear staging. */
+export function buildFalconGT() {
+  const car = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: PALETTE.carOrange, roughness: 0.32, metalness: 0.45 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#22242a', roughness: 0.6, metalness: 0.3 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#9fd4e8', roughness: 0.15, metalness: 0.6 });
+  const gold = new THREE.MeshStandardMaterial({ color: PALETTE.carGold, roughness: 0.35, metalness: 0.6 });
+  const tailGlow = new THREE.MeshBasicMaterial({ color: '#ff2a1a' });
+  const headGlow = new THREE.MeshBasicMaterial({ color: '#fff6cf' });
+  const rim = new THREE.MeshStandardMaterial({ color: '#d8dde2', roughness: 0.3, metalness: 0.8 });
+
+  // Lower body, cabin, hood and trunk — a low wide GT silhouette.
+  car.add(box(2.0, 0.55, 4.6, paint, 0, 0.55, 0));
+  car.add(box(1.8, 0.5, 2.2, glass, 0, 1.05, 0.35)); // cabin glass
+  car.add(box(1.84, 0.12, 2.3, paint, 0, 1.32, 0.35)); // roof
+  car.add(box(1.9, 0.18, 1.0, paint, 0, 0.72, -1.9)); // hood slope
+  // Gold stripe down the centre.
+  car.add(box(0.34, 0.04, 4.62, gold, 0, 0.84, 0));
+  car.add(box(0.34, 0.04, 2.32, gold, 0, 1.39, 0.35));
+  // Spoiler and tail-light bar (the cover's most readable details).
+  car.add(box(1.9, 0.08, 0.5, dark, 0, 1.02, 2.28));
+  car.add(box(0.12, 0.28, 0.12, dark, -0.85, 0.85, 2.28));
+  car.add(box(0.12, 0.28, 0.12, dark, 0.85, 0.85, 2.28));
+  car.add(box(1.86, 0.14, 0.08, tailGlow, 0, 0.62, 2.32));
+  // Headlights.
+  car.add(box(0.42, 0.12, 0.06, headGlow, -0.62, 0.6, -2.32));
+  car.add(box(0.42, 0.12, 0.06, headGlow, 0.62, 0.6, -2.32));
+  // Plate.
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.22),
+    new THREE.MeshBasicMaterial({ map: plateTexture(GAME.plate) }),
   );
-  tail.position.set(0, 0.78, 2.32);
-  car.add(tail);
-  // Headlights at the front.
-  for (const x of [-0.62, 0.62]) {
-    const lamp = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.1, 0.06),
-      new THREE.MeshBasicMaterial({ color: PALETTE.headLight }),
-    );
-    lamp.position.set(x, 0.62, -2.96);
-    car.add(lamp);
+  plate.position.set(0, 0.42, 2.37);
+  car.add(plate);
+  // Wheels: dark tyres, light rims — the rims are what make the car read as a car.
+  const tyreGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.28, 18);
+  const rimGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.3, 12);
+  for (const [x, z] of [[-0.95, -1.45], [0.95, -1.45], [-0.95, 1.45], [0.95, 1.45]]) {
+    const tyre = new THREE.Mesh(tyreGeo, dark);
+    tyre.rotation.z = Math.PI / 2;
+    tyre.position.set(x, 0.36, z);
+    tyre.castShadow = true;
+    car.add(tyre);
+    const hub = new THREE.Mesh(rimGeo, rim);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(x, 0.36, z);
+    car.add(hub);
   }
-  // Wheels: four, with hubs, tucked under the body.
-  const wheelPos = [
-    [-0.95, -1.55], [0.95, -1.55], [-0.95, 1.55], [0.95, 1.55],
-  ];
-  for (const [x, z] of wheelPos) {
-    const w = wheel(0.36, 0.28);
-    w.position.set(x, 0.36, z);
-    car.add(w);
-  }
-  // A soft dark shadow ellipse under the car, so it sits on the road.
-  const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(1.9, 24),
-    new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.45 }),
-  );
-  shadow.rotation.x = -Math.PI / 2;
-  shadow.scale.set(1, 2.4, 1);
-  shadow.position.y = 0.02;
-  car.add(shadow);
   return car;
 }
 
-/** A traffic car: same bones as the hero, plain paint, no spoiler, no stripes. */
-export function buildTrafficCar(color) {
+/** A traffic car in a bright colour. */
+export function buildTrafficCar(colorKey) {
   const car = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color });
-  const glassMat = new THREE.MeshLambertMaterial({ color: '#101820' });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.6, 4.1), bodyMat);
-  body.position.y = 0.6;
-  car.add(body);
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.52, 1.9), glassMat);
-  cabin.position.set(0, 1.12, 0.2);
-  car.add(cabin);
-  const tail = new THREE.Mesh(
-    new THREE.BoxGeometry(1.5, 0.12, 0.06),
-    new THREE.MeshBasicMaterial({ color: PALETTE.tailLight }),
-  );
-  tail.position.set(0, 0.72, 2.07);
-  car.add(tail);
-  for (const x of [-0.55, 0.55]) {
-    const lamp = new THREE.Mesh(
-      new THREE.BoxGeometry(0.42, 0.1, 0.06),
-      new THREE.MeshBasicMaterial({ color: PALETTE.headLight }),
-    );
-    lamp.position.set(x, 0.6, -2.07);
-    car.add(lamp);
+  const paint = new THREE.MeshStandardMaterial({ color: PALETTE[colorKey] ?? '#e5484d', roughness: 0.4, metalness: 0.35 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#22242a', roughness: 0.6 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#9fd4e8', roughness: 0.2, metalness: 0.5 });
+  const headGlow = new THREE.MeshBasicMaterial({ color: '#fff6cf' });
+  car.add(box(1.9, 0.55, 4.2, paint, 0, 0.55, 0));
+  car.add(box(1.7, 0.5, 2.0, glass, 0, 1.0, 0.3));
+  car.add(box(1.74, 0.12, 2.1, paint, 0, 1.26, 0.3));
+  car.add(box(0.4, 0.12, 0.06, headGlow, -0.6, 0.6, -2.12));
+  car.add(box(0.4, 0.12, 0.06, headGlow, 0.6, 0.6, -2.12));
+  const tyreGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.26, 14);
+  for (const [x, z] of [[-0.9, -1.35], [0.9, -1.35], [-0.9, 1.35], [0.9, 1.35]]) {
+    const tyre = new THREE.Mesh(tyreGeo, dark);
+    tyre.rotation.z = Math.PI / 2;
+    tyre.position.set(x, 0.34, z);
+    car.add(tyre);
   }
-  for (const [x, z] of [[-0.88, -1.4], [0.88, -1.4], [-0.88, 1.4], [0.88, 1.4]]) {
-    const w = wheel(0.33, 0.24);
-    w.position.set(x, 0.33, z);
-    car.add(w);
-  }
+  return car;
+}
+
+/** A police cruiser: white body, black doors, red/blue light bar. */
+export function buildPoliceCar() {
+  const car = buildTrafficCar('policeWhite');
+  const black = new THREE.MeshStandardMaterial({ color: PALETTE.policeBlack, roughness: 0.5 });
+  car.add(box(0.06, 0.5, 2.2, black, -0.96, 0.7, 0));
+  car.add(box(0.06, 0.5, 2.2, black, 0.96, 0.7, 0));
+  const red = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.3), new THREE.MeshBasicMaterial({ color: '#ff2a1a' }));
+  red.position.set(-0.4, 1.38, 0.3);
+  car.add(red);
+  const blue = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.3), new THREE.MeshBasicMaterial({ color: '#2a6bff' }));
+  blue.position.set(0.4, 1.38, 0.3);
+  car.add(blue);
   return car;
 }

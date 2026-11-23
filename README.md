@@ -1,33 +1,40 @@
 # Tarnwick — Come Home
 
-[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![rank](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/rank.svg)](https://make.fun/bounty/gta6-01)
-[![reward](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/reward.svg)](https://make.fun/bounty/gta6-01)
+[![MakeFun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![Rank](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/rank.svg)](https://make.fun/bounty/gta6-01)
+[![Reward](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/reward.svg)](https://make.fun/bounty/gta6-01)
 
-A [make.fun](https://make.fun/bounty/gta6-01) entry for **gta6-01**: an original open-world crime game in real three.js.
+An open-world crime game built for the [GTA 6 bounty](https://make.fun/bounty/gta6-01) on make.fun — real three.js, bright golden hour, no Rockstar names, places, or characters.
 
-Renn Kovacs returns to Tarnwick after six years. His brother Tam died on a smuggling run; his sister Sena runs dead drops; his fixer Uncle Bram still answers the phone; Capt. Elias Dray runs the harbour police; and the rival crew GREYLINE is moving on the docks. Eight missions, five acts, one long way home — in the FALCON GT, Tam's car.
+## The story
+
+Renn Kovacs returns to Tarnwick after six years away. His brother Tam died on a smuggling run, and the Falcon GT — Tam's car — is still in the garage. Sister Sena is running lookout, fixer Uncle Bram is calling in debts, Capt. Elias Dray has the whole Tarnwick PD net closing, and the rival GREYLINE crew wants the harbour for themselves. Eight missions, five acts, one long way home.
 
 ## The game
 
-- **Real three.js**: a golden-hour harbour street in 3D — the hero car at a three-quarter rear angle, buildings with side faces, a police helicopter with a bright white spotlight cone over a dark road, and a halo sun low on the horizon.
-- **The chase**: lose the heli, beat the mission timer, reach the harbour gate. Dense traffic, a seven-unit dispatch panel calling PIT MANEUVER and BOX IN, and a crew that answers — Sena's Dead Drop, Bram's Fixer Call, Mara's Lookout.
-- **On foot**: Renn in the street, weapons on the hip (AR-9, and an RPG still locked), health and armour, a minimap and an objective that does not wait.
-- **The map**: pause any time for the Tarnwick street map — five districts by turf, the route from Renn to the safehouse, all eight missions and their acts.
-- **The title**: TARNWICK, COME HOME, over a road that runs straight into the sun.
-
-No Rockstar names, places or characters. Tarnwick is its own city.
+- **The chase** — drive the Falcon GT down Harbour Road under the police helicopter's spotlight: four wanted stars, seven PD units on the dispatch board, a 1:47 timer to the harbour gate.
+- **On foot** — lose the heli through the night market: lit stalls, crowds, dead drops.
+- **The map** — a real street grid with five districts (Northside, Old Town, Market Row, Harbour, The Docks) and turf colours; the gold dashed route marks the run to the safehouse.
+- **The title** — golden hour on Harbour Road, the Falcon GT parked under a halo sun.
 
 ## Play
 
-Serve it locally with `node serve.ts`, then open http://localhost:8080.
+Serve it locally and open it in a desktop browser:
 
-- **W A S D** drive · **Space** handbrake · **Q E R** abilities · **P** pause · **Esc** quit to title.
+```sh
+node serve.ts
+# http://localhost:8080
+```
 
-## Build
+WASD to drive, Space for the handbrake, P to pause, M for the map. The hand-in is `main.ts` (`MAKEFUN_OUTPUT_DIR=out node main.ts`).
 
-`game/` is plain static files (ES modules, vendored three.js under `game/vendor/`). `main.ts` (Node 22, standard library only) copies `game/` and `screenshots/` to `/output` and writes `/output/dossier.json`.
+## Tech
+
+- three.js (vendored under `game/vendor/`, imported via an import map — no network at runtime)
+- One file per job under `game/src/`: world, city, car, helicopter, people, HUD, map, renderer, shots, input
+- Deterministic: every staged screenshot is rendered from a fixed seed at a fixed world time, so re-renders are byte-identical
+- Screenshots: `screenshots/` (cover first by name), each ≤ 256 KiB
 
 ## License
 
-SPDX-License-Identifier: MIT
+MIT — see [LICENSE](LICENSE).
