@@ -1,41 +1,33 @@
-# Tarnwick v8 — Come Home
+# Tarnwick — Come Home
 
 [![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
 [![rank](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/rank.svg)](https://make.fun/bounty/gta6-01)
 [![reward](https://make.fun/badge/gta6-01/Ryukein19/gta6-tarnwick-v8/reward.svg)](https://make.fun/bounty/gta6-01)
 
-A 3D open-world crime game — **Tarnwick: Come Home**. Renn Kovacs returns after six
-years to a faded resort town. His brother Tam is dead on a smuggling run; his sister
-Sena runs the Kovac Garage; the fixer Uncle Bram holds the Strand together; Capt.
-Elias Dray and the GREYLINE crew own the night. One way home: drive Tam's orange
-Falcon GT through a golden-hour police chase and work 8 story jobs across 6 districts.
+A [make.fun](https://make.fun/bounty/gta6-01) entry for **gta6-01**: an original open-world crime game in real three.js.
 
-## What is in the game
+Renn Kovacs returns to Tarnwick after six years. His brother Tam died on a smuggling run; his sister Sena runs dead drops; his fixer Uncle Bram still answers the phone; Capt. Elias Dray runs the harbour police; and the rival crew GREYLINE is moving on the docks. Eight missions, five acts, one long way home — in the FALCON GT, Tam's car.
 
-- **Golden-hour chase (the cover):** the whole Falcon GT, large and centred, under a
-  big police helicopter with a spotlight cone on the road; mission timer 1:47, DAY 6,
-  $24,600, 4 wanted stars, SHOT CALLER 840/1,200 RP.
-- **Tarnwick PD dispatch:** 7 named units with distance and tactic (SKUA-3 SPOTLIGHT,
-  MERLIN-4 PIT MANEUVER, GANNET-21 BOX IN…), plus a live dispatch ticker.
-- **Crew system:** Sena, Uncle Bram, Dax Rook and Maren Voss, each with an ability card
-  (portrait + key + cooldown: SWAP PLATES [Z] READY, QUICK FIX [X] 12S, EYES OUT [C] 30S).
-- **8 story jobs, 5-act arc,** from HOMECOMING to COME HOME, across Tarnwick Strand,
-  Old Tarnwick, Glassworks, Lantern Mile, The Marina and Harlow Heights.
-- **On foot in Lantern Mile:** the night market, Mama Odelle, stall money 2/5.
-- **Pause menu** with the full six-district map, 55% COMPLETE, career stats and 3 save
-  slots; **title screen** over a golden-hour panorama.
-- **Radio:** WAVE 97.9 Harbour Lights, HARBOUR 101.2 Low Tide, TARNWICK TALK 1210.
+## The game
 
-## How to play
+- **Real three.js**: a golden-hour harbour street in 3D — the hero car at a three-quarter rear angle, buildings with side faces, a police helicopter with a bright white spotlight cone over a dark road, and a halo sun low on the horizon.
+- **The chase**: lose the heli, beat the mission timer, reach the harbour gate. Dense traffic, a seven-unit dispatch panel calling PIT MANEUVER and BOX IN, and a crew that answers — Sena's Dead Drop, Bram's Fixer Call, Mara's Lookout.
+- **On foot**: Renn in the street, weapons on the hip (AR-9, and an RPG still locked), health and armour, a minimap and an objective that does not wait.
+- **The map**: pause any time for the Tarnwick street map — five districts by turf, the route from Renn to the safehouse, all eight missions and their acts.
+- **The title**: TARNWICK, COME HOME, over a road that runs straight into the sun.
+
+No Rockstar names, places or characters. Tarnwick is its own city.
+
+## Play
 
 Serve it locally with `node serve.ts`, then open http://localhost:8080.
 
-- **WASD** drive / walk · **E** enter or steal a car · **SPACE** handbrake
-- **1–5** weapons · **F** punch · **CLICK** shoot · **R** radio · **M** mute · **ESC** pause
+- **W A S D** drive · **Space** handbrake · **Q E R** abilities · **P** pause · **Esc** quit to title.
 
-Screenshots are staged with `?shot=chase|foot|menu|title&seed=N` (see `shots.json`).
-The game is plain static files — canvas 2D, ES modules, no library, no network.
+## Build
+
+`game/` is plain static files (ES modules, vendored three.js under `game/vendor/`). `main.ts` (Node 22, standard library only) copies `game/` and `screenshots/` to `/output` and writes `/output/dossier.json`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+SPDX-License-Identifier: MIT

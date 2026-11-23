@@ -1,26 +1,26 @@
-// The screenshot scenes behind ?shot=chase|foot|menu|title. Each one sets the world to
-// the staged composition — the cover chase, the Lantern Mile market on foot, the pause
-// menu over the chase, the title panorama — and returns the screen to draw over it.
-// The world is stepped forward a little first so the traffic, the pedestrians and the
-// helicopter sit in natural positions and the same seed always gives the same frame.
-import { STEP } from './config.js';
-import { SCREEN_CHASE, SCREEN_FOOT, SCREEN_MENU, SCREEN_TITLE } from './render.js';
+// The screenshot scenes behind ?shot=cover|foot|menu|title. Each one stages the real
+// world at the fixed shot time — the same seed always gives the same frame — and returns
+// the screen to draw and the HUD layout to show. The live game never runs in shot mode.
+import { SHOT_TIME } from './config.js';
+import { SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
-const SETTLE_STEPS = 60;
-
-/** Set `world` to the named scene and return the screen to draw over it. */
+/**
+ * Stage the named scene and return the screen and the HUD layout.
+ * cover: the golden-hour chase. foot: Renn on foot in the street.
+ * menu: the pause map. title: the title screen.
+ * The world is already reset by the boot; this only fixes the scene time, so the
+ * three.js cars built from the boot state and the HUD numbers always agree.
+ */
 export function stageShot(name, world) {
-  world.reset();
-  // Let the chase settle: traffic drifts in, the helicopter circles into place.
-  for (let i = 0; i < SETTLE_STEPS; i += 1) world.step(STEP, 0);
-  // The settle ticks the clock down: restore the staged values for the frame.
-  world.state.timerSeconds = 107;
-  world.state.sedanHealth = 58;
+  world.state.time = SHOT_TIME;
   if (name === 'foot') {
-    world.state.player.onFoot = true;
-    return { screen: SCREEN_FOOT };
+    return { screen: SCREEN_PLAY, hud: 'foot', best: 0 };
   }
-  if (name === 'menu') return { screen: SCREEN_MENU };
-  if (name === 'title') return { screen: SCREEN_TITLE };
-  return { screen: SCREEN_CHASE };
+  if (name === 'menu') {
+    return { screen: SCREEN_PAUSED, hud: 'menu', best: 0 };
+  }
+  if (name === 'title') {
+    return { screen: SCREEN_TITLE, hud: 'title', best: 0 };
+  }
+  return { screen: SCREEN_PLAY, hud: 'cover', best: 0 };
 }

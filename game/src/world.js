@@ -1,72 +1,82 @@
-// The world's rules and state, with no drawing and no browser in it: the player car,
-// traffic, police, pedestrians, the mission clock and the staged money. step() advances
-// one fixed step and returns what happened as bit flags, so the caller can react without
-// the world knowing about screens or sound. Nothing here allocates after createWorld
-// returns (the pools are allocated once, at boot).
-import { FIELD, STEP, MISSIONS, MONEY, RANK, HERO } from './config.js';
-import { createTraffic } from './traffic.js';
-import { createPolice } from './police.js';
-import { createPlayer } from './player.js';
+// The world's state: mission clock, money, rank, wanted level, traffic, helicopter and
+// the hero car. The state is a pure function of the seed plus the fixed shot time, so a
+// staged screenshot is the same frame every run. The live loop steps it in fixed 1/60 s
+// increments; the shot path never steps it at all.
+import { HUD, MISSIONS, STEP } from './config.js';
+import { createRandom, range } from './random.js';
 
-export const EVENT_ESCAPED = 1;
-export const EVENT_WRECKED = 2;
-export const EVENT_CAUGHT = 4;
+export const EVENT_OVER = 1;
 
-/**
- * The live chase state for JOB 6/8 — THE CAPTAIN'S CAR. The timer counts down from
- * 1:47; the sedan's health starts at 58% and falls as the player rams it; the wanted
- * level holds at 4 stars while the helicopter keeps its spotlight on the road.
- */
+/** Lanes across the road, in world units (the road runs down -Z, x is across it). */
+export const LANES = [-4.5, -1.5, 1.5, 4.5];
+
+const TRAFFIC_COLORS = ['#7a2e2e', '#2e4a7a', '#5a5a5a', '#7a6a2e', '#3a3a3a', '#8a4a2e'];
+
 export function createWorld(random) {
-  const player = createPlayer();
-  const traffic = createTraffic(random);
-  const police = createPolice(random);
   const state = {
-    player: player.state,
-    traffic: traffic.state,
-    police: police.state,
+    seed: 1,
+    time: 0,
     mission: MISSIONS[5],
-    missionStage: 2,
-    missionStages: 4,
-    timerSeconds: 107,
-    day: 6,
-    clock: '18:47',
-    money: MONEY,
-    rank: RANK,
-    speedKmh: HERO.speedKmh,
-    sedanHealth: 58,
-    elapsed: 0,
-    distanceKm: 0,
+    money: HUD.money,
+    day: HUD.day,
+    clock: HUD.clock,
+    timer: HUD.timerSeconds,
+    rankPoints: HUD.rankPoints,
+    rankNext: HUD.rankNext,
+    rankName: HUD.rankName,
+    wanted: HUD.wanted,
+    health: HUD.health,
+    armour: HUD.armour,
+    speed: 0,
+    traffic: [],
+    heli: { x: 6, y: 26, z: -34, angle: 0 },
+    hero: { x: 1.5, z: 0, heading: 0 },
+    onFoot: { x: 1.2, z: 6, heading: Math.PI },
   };
 
-  function reset() {
-    player.reset();
-    traffic.reset();
-    police.reset();
-    state.timerSeconds = 107;
-    state.sedanHealth = 58;
-    state.elapsed = 0;
-    state.distanceKm = 0;
-    state.speedKmh = HERO.speedKmh;
-  }
-
-  function step(dt, direction) {
-    let events = 0;
-    state.elapsed += dt;
-    state.timerSeconds = Math.max(0, state.timerSeconds - dt);
-    state.distanceKm += (state.speedKmh / 3600) * dt;
-    player.step(dt, direction);
-    traffic.step(dt, state.speedKmh);
-    police.step(dt);
-    // The hero nudges Dray's sedan: its health ticks down while the chase holds.
-    if (state.elapsed > 2 && Math.floor(state.elapsed * 2) !== Math.floor((state.elapsed - dt) * 2)) {
-      state.sedanHealth = Math.max(12, state.sedanHealth - 1);
+  /** Lay out the traffic for a scene: dense cars ahead of the hero, all from the seed. */
+  function layTraffic(count, startZ) {
+    state.traffic = [];
+    for (let i = 0; i < count; i += 1) {
+      const lane = LANES[Math.floor(random() * LANES.length)];
+      state.traffic.push({
+        x: lane,
+        z: startZ - i * range(random, 6, 10) - random() * 4,
+        speed: range(random, 9, 15),
+        color: TRAFFIC_COLORS[Math.floor(random() * TRAFFIC_COLORS.length)],
+        brake: random() < 0.25,
+      });
     }
-    if (state.sedanHealth <= 12) events |= EVENT_WRECKED;
-    if (state.timerSeconds <= 0) events |= EVENT_ESCAPED;
-    return events;
   }
 
-  reset();
-  return { state, reset, step };
+  return {
+    state,
+    /** Fresh world for a scene: hero at the origin, dense traffic ahead, heli overhead. */
+    reset(seed) {
+      state.seed = seed;
+      state.time = 0;
+      state.money = HUD.money;
+      state.timer = HUD.timerSeconds;
+      state.wanted = HUD.wanted;
+      state.health = HUD.health;
+      state.armour = HUD.armour;
+      state.speed = 88;
+      state.hero = { x: 1.5, z: 0, heading: 0 };
+      state.onFoot = { x: 1.2, z: 6, heading: Math.PI };
+      state.heli = { x: 6, y: 26, z: -34, angle: 0.35 };
+      layTraffic(9, -10);
+    },
+    /** One fixed step of the live game: the clock runs down, traffic rolls forward. */
+    step(dt) {
+      state.time += dt;
+      state.timer = Math.max(0, state.timer - dt);
+      for (const car of state.traffic) car.z += car.speed * dt;
+      state.heli.angle += dt * 0.6;
+      state.heli.x = 6 + Math.sin(state.time * 0.4) * 1.5;
+      if (state.timer === 0) return EVENT_OVER;
+      return 0;
+    },
+  };
 }
+
+export { createRandom, range, STEP };
