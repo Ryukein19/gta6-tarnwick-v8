@@ -1,180 +1,195 @@
-// The pause menu and the title screen: the full Tarnwick map with its six
-// districts and turf, the career stats, the activities line, and the three save
-// slots. The menu is drawn over a dimmed golden-hour panorama.
+// The pause menu and the title screen. The pause menu shows the full six-district
+// map with turf colours and the route, 55% COMPLETE, the progress bars, the career
+// stats, the activities line and three save slots. The title screen shows the tagline,
+// the buttons and the save slots over a golden-hour panorama. Both are pure drawing —
+// the renderer calls these with the canvas context.
+import { FIELD, PALETTE, DISTRICTS, CAREER, SAVES, FONT } from './config.js';
+import { readSaves } from './save.js';
 
-import { DISTRICTS, FIELD, FONT, PALETTE } from './config.js';
-import { CAREER } from './missions.js';
+const W = FIELD.width;
+const H = FIELD.height;
 
-/** District map positions (the pause-menu map is a stylised Tarnwick). */
-export const MAP_SPOTS = [
-  { name: 'TARNWICK STRAND', x: 0.62, y: 0.72, color: '#f2c94c' },
-  { name: 'OLD TARNWICK', x: 0.42, y: 0.6, color: '#e8b48f' },
-  { name: 'GLASSWORKS', x: 0.3, y: 0.34, color: '#cfe0d8' },
-  { name: 'LANTERN MILE', x: 0.52, y: 0.44, color: '#ffb98a' },
-  { name: 'THE MARINA', x: 0.78, y: 0.4, color: '#6fb7d9' },
-  { name: 'HARLOW HEIGHTS', x: 0.22, y: 0.62, color: '#b98a68' },
-];
-
-function text(ctx, value, x, y, size, color, align = 'left', bold = false) {
-  ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`;
-  ctx.fillStyle = color;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(value, x, y);
+function panel(ctx, x, y, w, h, alpha = 0.9) {
+  ctx.fillStyle = `rgba(12, 10, 14, ${alpha})`;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(242, 201, 76, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
 function bar(ctx, x, y, w, h, frac, fill) {
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillStyle = 'rgba(201, 189, 166, 0.3)';
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = fill;
   ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
 }
 
-/** The pause menu: map left, progress + career + saves right. */
-export function drawPauseMenu(ctx, state, saves) {
-  const mx = 60, my = 60, mw = FIELD.width - 120, mh = FIELD.height - 120;
-  ctx.fillStyle = 'rgba(12, 10, 14, 0.92)';
-  ctx.fillRect(mx, my, mw, mh);
-  ctx.strokeStyle = PALETTE.panelEdge;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(mx + 1, my + 1, mw - 2, mh - 2);
-  text(ctx, 'PAUSED — TARNWICK', mx + 28, my + 44, 26, PALETTE.text, 'left', true);
-  text(ctx, '55% COMPLETE', mx + mw - 28, my + 44, 20, PALETTE.gold, 'right', true);
+/** The pause menu: map left, stats right, saves along the bottom. */
+export function drawPauseMenu(ctx, state) {
+  // Dim the scene behind the menu.
+  ctx.fillStyle = 'rgba(10, 8, 10, 0.55)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
 
-  // Map (left half).
-  const mapX = mx + 28, mapY = my + 66, mapW = 560, mapH = 380;
-  ctx.fillStyle = '#2a2620';
-  ctx.fillRect(mapX, mapY, mapW, mapH);
-  ctx.strokeStyle = 'rgba(244,237,226,0.35)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(mapX + 0.5, mapY + 0.5, mapW - 1, mapH - 1);
-  // Coast + roads.
-  ctx.fillStyle = '#3a5a74';
-  ctx.beginPath();
-  ctx.moveTo(mapX + mapW * 0.72, mapY);
-  ctx.lineTo(mapX + mapW, mapY);
-  ctx.lineTo(mapX + mapW, mapY + mapH * 0.55);
-  ctx.lineTo(mapX + mapW * 0.8, mapY + mapH * 0.42);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(244,237,226,0.45)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(mapX + 20, mapY + mapH * 0.7);
-  ctx.lineTo(mapX + mapW - 40, mapY + mapH * 0.3);
-  ctx.moveTo(mapX + mapW * 0.4, mapY + 10);
-  ctx.lineTo(mapX + mapW * 0.55, mapY + mapH - 10);
-  ctx.stroke();
-  for (const spot of MAP_SPOTS) {
-    const sx = mapX + spot.x * mapW;
-    const sy = mapY + spot.y * mapH;
-    ctx.fillStyle = spot.color;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 7, 0, Math.PI * 2);
-    ctx.fill();
-    text(ctx, spot.name, sx + 12, sy + 4, 11, PALETTE.text, 'left', true);
-  }
-  // YOU marker on the Strand.
+  // Header.
   ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 26px system-ui, sans-serif';
+  ctx.fillText('PAUSED — TARNWICK', 48, 28);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '14px system-ui, sans-serif';
+  ctx.fillText('JOB 6/8 · THE CAPTAIN’S CAR  ·  DAY 6 · 18:47', 48, 60);
+
+  // Map panel (left).
+  const mx = 48;
+  const my = 92;
+  const mw = 640;
+  const mh = 340;
+  panel(ctx, mx, my, mw, mh);
+  ctx.fillStyle = '#1d2a33';
+  ctx.fillRect(mx + 12, my + 12, mw - 24, mh - 24);
+  // District blocks.
+  const blocks = [
+    { name: 'TARNWICK STRAND', x: 0.08, y: 0.55, w: 0.4, h: 0.36, colour: '#f2a541' },
+    { name: 'OLD TARNWICK', x: 0.08, y: 0.12, w: 0.34, h: 0.36, colour: '#e8b4b8' },
+    { name: 'GLASSWORKS', x: 0.46, y: 0.08, w: 0.24, h: 0.4, colour: '#9fc6d8' },
+    { name: 'LANTERN MILE', x: 0.5, y: 0.55, w: 0.22, h: 0.36, colour: '#f6c453' },
+    { name: 'THE MARINA', x: 0.74, y: 0.5, w: 0.2, h: 0.42, colour: '#7fb3d5' },
+    { name: 'HARLOW HEIGHTS', x: 0.72, y: 0.08, w: 0.22, h: 0.36, colour: '#b08d57' },
+  ];
+  for (const b of blocks) {
+    ctx.fillStyle = b.colour;
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(mx + 12 + b.x * (mw - 24), my + 12 + b.y * (mh - 24), b.w * (mw - 24), b.h * (mh - 24));
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#14100e';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(b.name, mx + 20 + b.x * (mw - 24), my + 20 + b.y * (mh - 24));
+  }
+  // Route arrow + YOU marker.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(mapX + 0.62 * mapW, mapY + 0.72 * mapH, 6, 0, Math.PI * 2);
+  ctx.moveTo(mx + 60, my + mh - 60);
+  ctx.lineTo(mx + 300, my + mh - 120);
+  ctx.lineTo(mx + 520, my + 90);
+  ctx.stroke();
+  ctx.fillStyle = '#ff7a1a';
+  ctx.beginPath();
+  ctx.arc(mx + 300, my + mh - 120, 8, 0, Math.PI * 2);
   ctx.fill();
-  text(ctx, 'YOU', mapX + 0.62 * mapW, mapY + 0.72 * mapH - 12, 11, PALETTE.gold, 'center', true);
-  text(ctx, 'Turf:  Strand crew  ·  GREYLINE  ·  Contested', mapX, mapY + mapH + 22, 12, PALETTE.muted);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 12px system-ui, sans-serif';
+  ctx.fillText('YOU', mx + 314, my + mh - 128);
 
-  // Right column: progress bars, career, activities, saves.
-  const rx = mapX + mapW + 30, rw = mx + mw - rx - 28;
-  let ry = my + 70;
+  // Progress panel (right).
+  const px = 716;
+  const py = 92;
+  const pw = 516;
+  const ph = 340;
+  panel(ctx, px, py, pw, ph);
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 20px system-ui, sans-serif';
+  ctx.fillText('55% COMPLETE', px + 16, py + 14);
   const rows = [
-    ['STORY', CAREER.storyDone, CAREER.storyTotal],
-    ['RACES', CAREER.racesDone, CAREER.racesTotal],
-    ['STUNTS', CAREER.stuntsDone, CAREER.stuntsTotal],
-    ['COLLECTIBLES', CAREER.collectiblesDone, CAREER.collectiblesTotal],
-    ['DISTRICT JOBS', CAREER.districtJobsDone, CAREER.districtJobsTotal],
-    ['CREW', CAREER.crewDone, CAREER.crewTotal],
+    ['STORY', 4, 8],
+    ['RACES', 2, 4],
+    ['STUNTS', 3, 8],
+    ['COLLECTIBLES', 9, 20],
+    ['DISTRICT JOBS', 5, 7],
+    ['CREW', 3, 3],
   ];
-  for (const [label, done, total] of rows) {
-    text(ctx, label, rx, ry, 12, PALETTE.muted);
-    text(ctx, `${done}/${total}`, rx + rw, ry, 12, PALETTE.text, 'right', true);
-    bar(ctx, rx, ry + 6, rw, 6, done / total, PALETTE.gold);
-    ry += 30;
-  }
-  ry += 6;
-  text(ctx, 'CAREER', rx, ry, 13, PALETTE.gold, 'left', true);
-  ry += 22;
-  const stats = [
-    `${CAREER.carsStolen} cars stolen`,
-    `${CAREER.copsEscaped} cops escaped`,
-    `${CAREER.kmDriven} km driven`,
-    `${CAREER.peopleOut} people taken out`,
-    `${CAREER.longestJump} m longest jump`,
-  ];
-  for (const s of stats) {
-    text(ctx, '· ' + s, rx, ry, 13, PALETTE.text);
-    ry += 20;
-  }
-  ry += 4;
-  text(ctx, 'ACTIVITIES 2/4 · STREET RACE · DELIVERY · CHOP SHOP · STUNTS', rx, ry, 12, PALETTE.gold);
-  ry += 26;
-  text(ctx, 'NEXT GOAL', rx, ry, 12, PALETTE.muted);
-  ry += 18;
-  text(ctx, CAREER.nextGoal, rx, ry, 13, PALETTE.text);
-  ry += 30;
-  // Save slots.
-  const slotW = (rw - 16) / 3;
-  saves.forEach((s, i) => {
-    const sx = rx + i * (slotW + 8);
-    const sy = my + mh - 84;
-    ctx.fillStyle = 'rgba(255,255,255,0.07)';
-    ctx.fillRect(sx, sy, slotW, 56);
-    ctx.strokeStyle = 'rgba(244,237,226,0.25)';
-    ctx.strokeRect(sx + 0.5, sy + 0.5, slotW - 1, 55);
-    if (s.empty) {
-      text(ctx, `SLOT ${s.slot}`, sx + 8, sy + 22, 12, PALETTE.muted, 'left', true);
-      text(ctx, 'EMPTY', sx + 8, sy + 42, 12, PALETTE.muted);
-    } else {
-      text(ctx, `SLOT ${s.slot} · ${s.act}`, sx + 8, sy + 20, 12, PALETTE.text, 'left', true);
-      text(ctx, `${s.pct}% · $${s.money.toLocaleString('en-US')} · ${s.time}`, sx + 8, sy + 40, 11, PALETTE.muted);
-    }
+  rows.forEach(([label, done, total], i) => {
+    const ry = py + 52 + i * 26;
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillText(label, px + 16, ry);
+    bar(ctx, px + 170, ry + 2, 220, 10, done / total, PALETTE.gold);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${done}/${total}`, px + pw - 16, ry);
+    ctx.textAlign = 'left';
   });
-  text(ctx, 'ESC resume · WASD drive · E enter/exit · 1-5 weapons', FIELD.width / 2, my + mh - 18, 12, PALETTE.muted, 'center');
+  // Career stats.
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('CAREER', px + 16, py + 222);
+  ctx.fillStyle = PALETTE.text;
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillText(`${CAREER.carsStolen} cars stolen · ${CAREER.copsEscaped} cops escaped · ${CAREER.kmDriven} km driven`, px + 16, py + 244);
+  ctx.fillText(`${CAREER.peopleTakenOut} people taken out · ${CAREER.longestJumpM} m longest jump`, px + 16, py + 264);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.fillText(CAREER.activities, px + 16, py + 290);
+  ctx.fillStyle = PALETTE.gold;
+  ctx.fillText(CAREER.nextGoal, px + 16, py + 310);
+
+  // Save slots along the bottom.
+  drawSaveSlots(ctx, 48, 452, W - 96, 120);
+  // Resume hint.
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('ESC — RESUME  ·  M — MAP  ·  R — RADIO', W / 2, 600);
+  ctx.textAlign = 'left';
 }
 
-/** The title screen: tagline, buttons, save slots, over the panorama. Text over
- *  the bright sky gets a dark shadow so it stays readable at contact-sheet size. */
-export function drawTitleScreen(ctx, saves) {
-  ctx.save();
-  ctx.shadowColor = 'rgba(20, 12, 8, 0.85)';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 3;
-  text(ctx, '— THE LAST GOOD LIGHT —', FIELD.width / 2, 168, 24, PALETTE.gold, 'center', true);
-  text(ctx, 'TARNWICK', FIELD.width / 2, 268, 92, PALETTE.text, 'center', true);
-  text(ctx, '3D · OPEN-WORLD CRIME · 8 STORY JOBS · POLICE · SAVES', FIELD.width / 2, 316, 18, PALETTE.text, 'center');
-  text(ctx, 'A faded resort town. A crew in pieces. One way home.', FIELD.width / 2, 348, 16, PALETTE.muted, 'center');
-  ctx.restore();
-  const buttons = ['NEW GAME', 'CONTINUE', 'LOAD GAME'];
-  buttons.forEach((b, i) => {
-    const by = 396 + i * 52;
-    ctx.fillStyle = i === 0 ? 'rgba(242,201,76,0.9)' : 'rgba(16,14,20,0.85)';
-    ctx.fillRect(FIELD.width / 2 - 130, by, 260, 40);
-    ctx.strokeStyle = PALETTE.panelEdge;
-    ctx.strokeRect(FIELD.width / 2 - 129.5, by + 0.5, 259, 39);
-    text(ctx, b, FIELD.width / 2, by + 27, 17, i === 0 ? '#141210' : PALETTE.text, 'center', true);
+/** Three save slots in a row. */
+export function drawSaveSlots(ctx, x, y, w, h) {
+  const saves = readSaves();
+  const sw = (w - 32) / 3;
+  saves.forEach((save, i) => {
+    const sx = x + i * (sw + 16);
+    panel(ctx, sx, y, sw, h, 0.9);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = PALETTE.gold;
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillText(`SAVE ${save.slot} — ${save.act}`, sx + 14, y + 12);
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillText(`${save.progress}%  ·  $${save.money.toLocaleString('en-US')}  ·  ${save.time}`, sx + 14, y + 40);
+    ctx.fillStyle = PALETTE.muted;
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText('Tarnwick Strand · Falcon GT', sx + 14, y + 66);
   });
-  saves.forEach((s, i) => {
-    const sx = FIELD.width / 2 - 270 + i * 190;
-    const sy = 578;
-    ctx.fillStyle = 'rgba(16,14,20,0.85)';
-    ctx.fillRect(sx, sy, 170, 52);
-    ctx.strokeStyle = 'rgba(244,237,226,0.25)';
-    ctx.strokeRect(sx + 0.5, sy + 0.5, 169, 51);
-    if (s.empty) {
-      text(ctx, `SLOT ${s.slot}`, sx + 10, sy + 22, 12, PALETTE.muted, 'left', true);
-      text(ctx, 'EMPTY', sx + 10, sy + 40, 12, PALETTE.muted);
-    } else {
-      text(ctx, `SLOT ${s.slot} · ${s.act}`, sx + 10, sy + 20, 12, PALETTE.text, 'left', true);
-      text(ctx, `${s.pct}% · $${s.money.toLocaleString('en-US')} · ${s.time}`, sx + 10, sy + 38, 11, PALETTE.muted);
-    }
-  });
-  text(ctx, 'Keyboard & mouse', FIELD.width / 2, 668, 13, '#3a2f26', 'center', true);
 }
+
+/** The title screen: tagline, buttons, save slots, control bar. */
+export function drawTitleScreen(ctx) {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(12, 10, 14, 0.45)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = '16px system-ui, sans-serif';
+  ctx.fillText('— THE LAST GOOD LIGHT —', W / 2, 108);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 92px system-ui, sans-serif';
+  ctx.fillText('TARNWICK', W / 2, 132);
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.fillText('3D · OPEN-WORLD CRIME · 8 STORY JOBS · POLICE · SAVES', W / 2, 246);
+  ctx.fillStyle = PALETTE.text;
+  ctx.font = '17px system-ui, sans-serif';
+  ctx.fillText('A faded resort town. A crew in pieces. One way home.', W / 2, 276);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillText('Keyboard & mouse', W / 2, 302);
+  // Buttons.
+  const buttons = ['NEW GAME', 'CONTINUE', 'LOAD GAME'];
+  buttons.forEach((label, i) => {
+    const by = 348 + i * 48;
+    const selected = i === 0;
+    ctx.fillStyle = selected ? PALETTE.gold : 'rgba(12, 10, 14, 0.8)';
+    ctx.fillRect(W / 2 - 130, by, 260, 38);
+    ctx.fillStyle = selected ? '#14100e' : PALETTE.text;
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillText(label, W / 2, by + 11);
+  });
+  drawSaveSlots(ctx, 190, 512, W - 380, 96);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText('WASD DRIVE/WALK  ·  E ENTER OR STEAL A CAR  ·  SPACE HANDBRAKE  ·  1-5 WEAPONS  ·  ESC PAUSE', W / 2, 636);
+  ctx.textAlign = 'left';
+}
+
+export { FONT, DISTRICTS };

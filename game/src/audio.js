@@ -1,65 +1,46 @@
-// Sound, kept small: a WebAudio engine hum and radio blips, all behind a
-// guarded start (browsers need a gesture; headless shots run silent).
+// Sound, kept minimal and safe: short WebAudio bleeps for the siren, the radio blip
+// and the pickup chime. Everything is created lazily on first user gesture and guarded,
+// so a headless run or a muted tab never throws. M toggles mute.
+export function createAudio() {
+  let ctx = null;
+  let muted = false;
 
-let ctx = null;
-let engineOsc = null;
-let engineGain = null;
-let muted = false;
-
-function ensure() {
-  if (ctx) return ctx;
-  try {
-    const AC = window.AudioContext ?? window.webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC();
-    engineGain = ctx.createGain();
-    engineGain.gain.value = 0;
-    engineGain.connect(ctx.destination);
-    engineOsc = ctx.createOscillator();
-    engineOsc.type = 'sawtooth';
-    engineOsc.frequency.value = 55;
-    engineOsc.connect(engineGain);
-    engineOsc.start();
-  } catch {
-    ctx = null;
+  function ensure() {
+    if (ctx !== null) return ctx;
+    try {
+      const AC = window.AudioContext ?? window.webkitAudioContext;
+      ctx = AC ? new AC() : null;
+    } catch {
+      ctx = null;
+    }
+    return ctx;
   }
-  return ctx;
-}
 
-/** Start audio (call on first user gesture). */
-export function startAudio() {
-  const c = ensure();
-  if (c && c.state === 'suspended') c.resume().catch(() => {});
-}
-
-/** Engine hum follows speed: 0 (idle) .. 1 (flat out). */
-export function setEngine(level) {
-  if (!ctx || muted || !engineOsc || !engineGain) return;
-  engineOsc.frequency.value = 55 + level * 90;
-  engineGain.gain.value = 0.02 + level * 0.03;
-}
-
-/** One short blip (pickup, UI confirm). */
-export function blip(freq = 660) {
-  if (!ctx || muted) return;
-  try {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.05, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.13);
-  } catch {
-    // Silent is fine.
+  function blip(freq, seconds, type, gainValue) {
+    if (muted) return;
+    const ac = ensure();
+    if (ac === null) return;
+    try {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(gainValue, ac.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + seconds);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + seconds);
+    } catch {
+      // Audio is decoration; a failure here must never break the game.
+    }
   }
-}
 
-export function toggleMute() {
-  muted = !muted;
-  if (engineGain) engineGain.gain.value = 0;
-  return muted;
+  return {
+    siren() { blip(660, 0.28, 'sine', 0.05); },
+    chime() { blip(880, 0.18, 'triangle', 0.06); },
+    thud() { blip(120, 0.22, 'square', 0.08); },
+    toggleMute() { muted = !muted; return muted; },
+    isMuted() { return muted; },
+  };
 }

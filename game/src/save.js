@@ -1,26 +1,18 @@
-// Saves: three slots in localStorage — act, completion %, money and time.
-// Storage can be off (private windows); then saves last this visit only.
-
-import { SAVE_KEY } from './config.js';
+// Saves: three slots in localStorage, each holding an act, a progress %, money and a
+// clock time. Reads and writes are guarded — private windows and headless runs can
+// refuse storage, and the game must keep working when they do.
+import { SAVE_KEY, SAVES } from './config.js';
 
 export function readSaves() {
   try {
     const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return defaultSaves();
+    if (raw === null) return SAVES.map((s) => ({ ...s }));
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length !== 3) return defaultSaves();
+    if (!Array.isArray(parsed) || parsed.length !== 3) return SAVES.map((s) => ({ ...s }));
     return parsed;
   } catch {
-    return defaultSaves();
+    return SAVES.map((s) => ({ ...s }));
   }
-}
-
-export function defaultSaves() {
-  return [
-    { slot: 1, act: 'ACT 3', pct: 55, money: 24600, time: '18:47', empty: false },
-    { slot: 2, act: 'ACT 2', pct: 31, money: 12400, time: '12:20', empty: false },
-    { slot: 3, act: '', pct: 0, money: 0, time: '', empty: true },
-  ];
 }
 
 export function writeSaves(saves) {
@@ -32,9 +24,8 @@ export function writeSaves(saves) {
   }
 }
 
-/** Overwrite one slot with the current progress. */
-export function saveToSlot(slot, act, pct, money, time) {
+export function writeSaveSlot(slot, save) {
   const saves = readSaves();
-  saves[slot - 1] = { slot, act, pct, money, time, empty: false };
+  saves[slot - 1] = { slot, ...save };
   return writeSaves(saves);
 }

@@ -1,84 +1,113 @@
-// Tarnwick PD in the air and on the road: the police helicopter with its
-// spotlight cone, the flanking cruisers, and the dispatch roster. The helicopter
-// is the chase's proof of escalation — in v8 it is large, top-centre, and its
-// cone visibly hits the road ahead of the hero car.
+// Tarnwick PD: the helicopter SKUA-3 with its spotlight cone, the flanking cruisers,
+// and the 7-unit dispatch board. The helicopter circles slowly above the road; its
+// spotlight cone is a translucent wedge that visibly hits the road ahead of the hero
+// car. The wanted level holds at 4 stars while the chase is live.
+import { DISPATCH, WANTED_STARS } from './config.js';
 
-/** Draw the helicopter: body, tail, spinning rotor, searchlight cone. */
-export function drawHeli(ctx, x, y, span, rotorAngle, coneTarget) {
-  const bodyW = span * 0.42;
-  const bodyH = span * 0.16;
-  ctx.save();
-  // Spotlight cone: from the heli down to the road ahead (translucent gold).
-  const grad = ctx.createLinearGradient(x, y + bodyH, coneTarget.x, coneTarget.y);
-  grad.addColorStop(0, 'rgba(255, 230, 150, 0.5)');
-  grad.addColorStop(1, 'rgba(255, 230, 150, 0.05)');
+export function createPolice(random) {
+  const state = {
+    units: DISPATCH,
+    wanted: WANTED_STARS,
+    heliAngle: 0.6,
+    heliX: 640,
+    heliY: 118,
+    rotor: 0,
+    cruisers: [
+      { lane: -2.4, depth: 0.34 },
+      { lane: 2.5, depth: 0.4 },
+    ],
+  };
+
+  function reset() {
+    state.heliAngle = 0.6;
+    state.heliX = 640;
+    state.heliY = 118;
+    state.rotor = 0;
+    state.cruisers[0].lane = -2.4;
+    state.cruisers[0].depth = 0.34;
+    state.cruisers[1].lane = 2.5;
+    state.cruisers[1].depth = 0.4;
+  }
+
+  function step(dt) {
+    state.heliAngle += dt * 0.12;
+    state.heliX = 640 + Math.sin(state.heliAngle) * 90;
+    state.heliY = 118 + Math.sin(state.heliAngle * 2.3) * 10;
+    state.rotor += dt * 22;
+    for (const cruiser of state.cruisers) {
+      cruiser.depth -= dt * 0.004;
+      if (cruiser.depth < 0.2) cruiser.depth = 0.55;
+    }
+  }
+
+  return { state, reset, step };
+}
+
+/** Draw the helicopter: body, tail, rotor disc, skids, and the spotlight cone down to
+ * the road ahead of the hero car. `targetX` is where the cone lands on the road. */
+export function drawHelicopter(ctx, heli, targetX, targetY, t) {
+  const x = heli.heliX;
+  const y = heli.heliY;
+  const w = 150;
+  const h = 34;
+
+  // Spotlight cone: a wide translucent wedge from the heli to the road.
+  const grad = ctx.createLinearGradient(x, y + h * 0.4, targetX, targetY);
+  grad.addColorStop(0, 'rgba(255, 244, 190, 0.65)');
+  grad.addColorStop(1, 'rgba(255, 244, 190, 0.08)');
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(x - span * 0.06, y + bodyH * 0.6);
-  ctx.lineTo(x + span * 0.06, y + bodyH * 0.6);
-  ctx.lineTo(coneTarget.x + span * 0.16, coneTarget.y);
-  ctx.lineTo(coneTarget.x - span * 0.16, coneTarget.y);
+  ctx.moveTo(x - 12, y + h * 0.4);
+  ctx.lineTo(x + 12, y + h * 0.4);
+  ctx.lineTo(targetX + 110, targetY);
+  ctx.lineTo(targetX - 110, targetY);
   ctx.closePath();
   ctx.fill();
-  // Light pool where the cone lands.
-  ctx.fillStyle = 'rgba(255, 230, 150, 0.28)';
+  // Bright pool where the cone hits the road.
+  ctx.fillStyle = 'rgba(255, 244, 190, 0.35)';
   ctx.beginPath();
-  ctx.ellipse(coneTarget.x, coneTarget.y, span * 0.17, span * 0.05, 0, 0, Math.PI * 2);
+  ctx.ellipse(targetX, targetY, 110, 16, 0, 0, Math.PI * 2);
   ctx.fill();
+
   // Tail boom + fin.
-  ctx.fillStyle = '#1c2733';
-  ctx.fillRect(x + bodyW * 0.4, y - bodyH * 0.28, span * 0.3, bodyH * 0.28);
+  ctx.fillStyle = '#20242c';
+  ctx.fillRect(x - w * 0.62, y - h * 0.1, w * 0.42, h * 0.22);
   ctx.beginPath();
-  ctx.moveTo(x + bodyW * 0.4 + span * 0.3, y - bodyH * 0.28);
-  ctx.lineTo(x + bodyW * 0.4 + span * 0.3, y - bodyH * 0.9);
-  ctx.lineTo(x + bodyW * 0.4 + span * 0.24, y - bodyH * 0.28);
+  ctx.moveTo(x - w * 0.62, y - h * 0.1);
+  ctx.lineTo(x - w * 0.72, y - h * 0.7);
+  ctx.lineTo(x - w * 0.52, y - h * 0.1);
   ctx.closePath();
   ctx.fill();
   // Body.
-  ctx.fillStyle = '#22303e';
+  ctx.fillStyle = '#2b313c';
   ctx.beginPath();
-  ctx.ellipse(x, y, bodyW * 0.5, bodyH * 0.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y, w * 0.32, h * 0.52, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Canopy.
-  ctx.fillStyle = '#9fc4d9';
+  // Cockpit glass.
+  ctx.fillStyle = '#9fc6d8';
   ctx.beginPath();
-  ctx.ellipse(x - bodyW * 0.18, y - bodyH * 0.12, bodyW * 0.2, bodyH * 0.26, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(x + w * 0.16, y - h * 0.08, w * 0.13, h * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
   // Skids.
-  ctx.strokeStyle = '#10161d';
-  ctx.lineWidth = Math.max(2, span * 0.012);
+  ctx.strokeStyle = '#14100e';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(x - bodyW * 0.34, y + bodyH * 0.62);
-  ctx.lineTo(x + bodyW * 0.34, y + bodyH * 0.62);
+  ctx.moveTo(x - w * 0.24, y + h * 0.62);
+  ctx.lineTo(x + w * 0.24, y + h * 0.62);
   ctx.stroke();
+  // Rotor disc (blurred by rotation) + mast.
+  ctx.strokeStyle = 'rgba(20, 16, 12, 0.55)';
+  ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(x - bodyW * 0.24, y + bodyH * 0.42);
-  ctx.lineTo(x - bodyW * 0.3, y + bodyH * 0.62);
-  ctx.moveTo(x + bodyW * 0.24, y + bodyH * 0.42);
-  ctx.lineTo(x + bodyW * 0.3, y + bodyH * 0.62);
+  const tilt = Math.sin(heli.rotor) * 0.12;
+  ctx.moveTo(x - w * 0.62, y - h * 0.62 + tilt * 30);
+  ctx.lineTo(x + w * 0.62, y - h * 0.62 - tilt * 30);
   ctx.stroke();
-  // Rotor: two blades spinning (drawn as a blurred disc + blade line).
-  ctx.fillStyle = 'rgba(220, 230, 240, 0.28)';
+  ctx.fillStyle = '#14100e';
+  ctx.fillRect(x - 3, y - h * 0.62, 6, h * 0.5);
+  // Searchlight housing under the nose.
+  ctx.fillStyle = '#fff3c4';
   ctx.beginPath();
-  ctx.ellipse(x, y - bodyH * 0.85, span * 0.5, span * 0.05, 0, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.2, y + h * 0.42, 7, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(20, 24, 30, 0.85)';
-  ctx.lineWidth = Math.max(2, span * 0.014);
-  const a = rotorAngle % Math.PI;
-  ctx.beginPath();
-  ctx.moveTo(x - Math.cos(a) * span * 0.5, y - bodyH * 0.85 - Math.sin(a) * span * 0.05);
-  ctx.lineTo(x + Math.cos(a) * span * 0.5, y - bodyH * 0.85 + Math.sin(a) * span * 0.05);
-  ctx.stroke();
-  // "POLICE" marking.
-  ctx.fillStyle = '#f4ede2';
-  ctx.font = `bold ${Math.max(9, span * 0.05)}px system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('POLICE', x + bodyW * 0.05, y + bodyH * 0.08);
-  ctx.restore();
-}
-
-/** A police cruiser flanking the player (same car drawing, police livery). */
-export function cruiserColor() {
-  return '#22303e';
 }

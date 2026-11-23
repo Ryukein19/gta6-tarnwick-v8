@@ -1,44 +1,32 @@
-// Renn Kovacs and the Falcon GT — Tam's car, the hero of the chase. The player
-// steers across lanes, holds speed, and can spend nitro. Damage grows when the
-// police land a hit; at 100% the car is wrecked.
-
-import { FIELD } from './config.js';
+// The player: Renn Kovacs in Tam's Falcon GT. Steering moves the hero across the road
+// (lateral metres from the centre line); the car sits at a fixed depth near the camera
+// so it reads whole and large. Speed eases toward the staged 107 KM/H.
+import { HERO } from './config.js';
 
 export function createPlayer() {
-  return {
-    lane: 0.28,
-    speed: 112,
-    damage: 38,
-    nitro: 1,
-    nitroLeft: 100,
+  const state = {
+    lateral: 0.4,
+    depth: 0.3,
+    speedKmh: HERO.speedKmh,
+    health: 100,
+    armour: 78,
     onFoot: false,
-    x: 0,
-    y: 0,
-    width: 0,
   };
-}
 
-/** Steer: direction -1/0/1, dt seconds, nitro held or not. */
-export function stepPlayer(player, direction, nitro, dt) {
-  player.lane = Math.max(-0.82, Math.min(0.82, player.lane + direction * dt * 0.85));
-  const target = nitro && player.nitroLeft > 0 ? 168 : 112;
-  player.speed += (target - player.speed) * Math.min(1, dt * 1.2);
-  if (nitro && player.nitroLeft > 0) player.nitroLeft = Math.max(0, player.nitroLeft - dt * 22);
-  else player.nitroLeft = Math.min(100, player.nitroLeft + dt * 4);
-}
+  function reset() {
+    state.lateral = 0.4;
+    state.depth = 0.3;
+    state.speedKmh = HERO.speedKmh;
+    state.health = 100;
+    state.armour = 78;
+    state.onFoot = false;
+  }
 
-/** Screen placement of the hero car: whole, large, centred slightly right. */
-export function heroPlacement() {
-  return {
-    x: FIELD.width * 0.56,
-    y: 512,
-    w: FIELD.width * 0.26,
-  };
-}
+  function step(dt, direction) {
+    state.lateral += direction * 3.4 * dt;
+    state.lateral = Math.min(2.6, Math.max(-2.6, state.lateral));
+    state.speedKmh += (HERO.speedKmh - state.speedKmh) * Math.min(1, dt * 0.8);
+  }
 
-/** A police hit lands: damage grows, speed dips. Returns true when wrecked. */
-export function takeHit(player, amount) {
-  player.damage = Math.min(100, player.damage + amount);
-  player.speed = Math.max(40, player.speed - 18);
-  return player.damage >= 100;
+  return { state, reset, step };
 }

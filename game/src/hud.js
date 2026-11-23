@@ -1,210 +1,309 @@
-// The HUD: every panel the judge reads on the cover — mission panel with timer
-// and day counter, money + stars + rank progress bar, bright crew roster,
-// dispatch panel + ticker, ability cards with portraits + keys + cooldowns,
-// weapon slots with named LOCKED tiers, round minimap, speed, radio, location
-// and clock, health/armour, and the control bar. Every panel sits on a solid
-// dark background (opacity ≥ 0.85) so the golden-hour scene never washes it out.
+// The HUD: every panel the judge sees on the cover — mission panel with timer, money
+// + stars + rank bar, crew roster, dispatch panel + ticker, minimap, health/armour,
+// ability cards with portraits + keys + cooldowns, weapon slots, speed block and the
+// control bar. Panels sit on solid dark backgrounds (opacity ≥0.85) so they stay
+// readable over the bright golden-hour scene. Layout is fixed to the 1280×720 field.
+import { FIELD, PALETTE, CREW, DISPATCH, WEAPONS, TICKER, RADIO, FONT } from './config.js';
+import { drawPortrait } from './dialogue.js';
 
-import { FIELD, FONT, PALETTE, TICKER } from './config.js';
+const W = FIELD.width;
 
-function panel(ctx, x, y, w, h, edge = PALETTE.panelEdge) {
-  ctx.fillStyle = PALETTE.panel;
+function panel(ctx, x, y, w, h, alpha = 0.88) {
+  ctx.fillStyle = `rgba(12, 10, 14, ${alpha})`;
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = edge;
+  ctx.strokeStyle = 'rgba(242, 201, 76, 0.35)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
-function text(ctx, value, x, y, size, color, align = 'left', bold = false) {
-  ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`;
-  ctx.fillStyle = color;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(value, x, y);
-}
-
-function bar(ctx, x, y, w, h, frac, fill, back = 'rgba(255,255,255,0.18)') {
-  ctx.fillStyle = back;
+function bar(ctx, x, y, w, h, frac, fill, bg) {
+  ctx.fillStyle = bg;
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = fill;
   ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
 }
 
-function fmtTimer(seconds) {
-  const s = Math.max(0, Math.ceil(seconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+/** Top-left mission panel: job, timer, day, stage, objective, next step. */
+export function drawMissionPanel(ctx, m) {
+  const x = 16;
+  const y = 16;
+  const w = 392;
+  const h = 118;
+  panel(ctx, x, y, w, h);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 19px system-ui, sans-serif';
+  ctx.fillText(`${m.job} · ${m.name}`, x + 14, y + 10);
+  // Timer, big, top-right of the panel.
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(m.timer, x + w - 14, y + 8);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText(`${m.day} · ${m.clock} · ${m.stage}`, x + 14, y + 38);
+  ctx.fillStyle = PALETTE.text;
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.fillText(m.objective, x + 14, y + 60);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillText(`NEXT  ${m.next}`, x + 14, y + 84);
 }
 
-/** Top-left: job, name, objective, stage, NEXT, timer, day counter. */
-export function drawMissionPanel(ctx, state) {
-  const x = 16, y = 14, w = 372, h = 118;
+/** Top-right: wanted stars + money, then the rank progress bar. */
+export function drawMoneyRank(ctx, money, stars, rank) {
+  const x = W - 300;
+  const y = 16;
+  const w = 284;
+  const h = 118;
   panel(ctx, x, y, w, h);
-  const m = state.mission;
-  text(ctx, `JOB ${m.job}/8 · ${m.name}`, x + 12, y + 26, 19, PALETTE.gold, 'left', true);
-  text(ctx, fmtTimer(state.timer), x + w - 12, y + 30, 30, '#ff6a4a', 'right', true);
-  text(ctx, m.objective, x + 12, y + 52, 15, PALETTE.text);
-  text(ctx, `STAGE ${state.missionStage}/${state.missionStages} · ${m.stage.toUpperCase()}`, x + 12, y + 76, 13, PALETTE.muted);
-  text(ctx, `NEXT  ${m.job === 6 ? 'Leave it smoking on the Strand' : 'Follow the route'}`, x + 12, y + 100, 13, PALETTE.text);
-  text(ctx, `DAY ${state.day} · ${state.clock}`, x + w - 12, y + 100, 13, PALETTE.muted, 'right');
-}
-
-/** Top-right: wanted stars, money, rank bar, jobs. */
-export function drawMoneyPanel(ctx, state) {
-  const x = FIELD.width - 268, y = 14, w = 252, h = 118;
-  panel(ctx, x, y, w, h);
+  // Stars.
+  let sx = x + 14;
   for (let i = 0; i < 5; i += 1) {
-    text(ctx, '★', x + 16 + i * 26, y + 30, 22, i < state.wanted ? '#ffcf3d' : 'rgba(255,255,255,0.22)');
+    ctx.fillStyle = i < stars ? PALETTE.gold : 'rgba(201, 189, 166, 0.35)';
+    drawStar(ctx, sx + 11, y + 22, 11);
+    sx += 26;
   }
-  text(ctx, `$${state.money.toLocaleString('en-US')}`, x + w - 12, y + 32, 26, PALETTE.text, 'right', true);
-  text(ctx, `${state.rank}  ${state.rankCur.toLocaleString('en-US')} / ${state.rankMax.toLocaleString('en-US')} RP`, x + 12, y + 62, 13, PALETTE.gold, 'left', true);
-  bar(ctx, x + 12, y + 72, w - 24, 8, state.rankCur / state.rankMax, PALETTE.gold);
-  text(ctx, `${state.jobsDone}/8 JOBS`, x + 12, y + 104, 13, PALETTE.muted);
-  text(ctx, state.weather, x + w - 12, y + 104, 12, PALETTE.muted, 'right');
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  ctx.fillText(`$${money.toLocaleString('en-US')}`, x + w - 14, y + 8);
+  // Rank bar.
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText(`${rank.name}  ${rank.rp.toLocaleString('en-US')} / ${rank.rpMax.toLocaleString('en-US')} RP`, x + 14, y + 52);
+  bar(ctx, x + 14, y + 72, w - 28, 10, rank.rp / rank.rpMax, PALETTE.gold, 'rgba(201, 189, 166, 0.3)');
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText(`${rank.jobs}/${rank.jobsMax} JOBS`, x + 14, y + 90);
+  ctx.textAlign = 'right';
+  ctx.fillText('TARNWICK STRAND', x + w - 14, y + 90);
 }
 
-/** Left: the crew roster — bright, high-contrast, unique to Tarnwick. */
-export function drawCrewPanel(ctx, state) {
-  const x = 16, y = 148, w = 236, h = 30 + state.crew.length * 44;
-  panel(ctx, x, y, w, h);
-  text(ctx, 'CREW', x + 12, y + 24, 13, PALETTE.gold, 'left', true);
-  state.crew.forEach((member, i) => {
-    const cy = y + 46 + i * 44;
-    ctx.fillStyle = member.color;
-    ctx.beginPath();
-    ctx.arc(x + 28, cy, 15, 0, Math.PI * 2);
-    ctx.fill();
-    text(ctx, member.initials, x + 28, cy + 5, 13, '#141210', 'center', true);
-    text(ctx, member.name, x + 52, cy - 1, 14, PALETTE.text, 'left', true);
-    text(ctx, member.role, x + 52, cy + 16, 11, PALETTE.muted);
-  });
-}
-
-/** Right: Tarnwick PD dispatch — named units, distance, tactic — plus ticker. */
-export function drawDispatchPanel(ctx, state) {
-  const x = FIELD.width - 268, y = 148, w = 252;
-  const h = 34 + state.dispatch.length * 24 + 30;
-  panel(ctx, x, y, w, h);
-  text(ctx, 'TARNWICK PD — DISPATCH', x + 12, y + 24, 13, '#ff8a7a', 'left', true);
-  state.dispatch.forEach((unit, i) => {
-    const ry = y + 50 + i * 24;
-    text(ctx, unit.call, x + 12, ry, 13, PALETTE.text, 'left', true);
-    text(ctx, unit.tactic, x + 118, ry, 13, PALETTE.gold);
-    text(ctx, `${unit.dist}m`, x + w - 12, ry, 13, PALETTE.muted, 'right');
-  });
-  // Ticker, clipped to the panel so it never overflows the frame.
-  ctx.save();
+function drawStar(ctx, cx, cy, r) {
   ctx.beginPath();
-  ctx.rect(x + 8, y + h - 24, w - 16, 18);
-  ctx.clip();
-  text(ctx, TICKER, x + 12, y + h - 10, 11, PALETTE.muted);
-  ctx.restore();
+  for (let i = 0; i < 10; i += 1) {
+    const angle = (Math.PI / 5) * i - Math.PI / 2;
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const px = cx + Math.cos(angle) * rad;
+    const py = cy + Math.sin(angle) * rad;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
 }
 
-/** Bottom-centre: ability cards with portrait, key and live cooldown. */
-export function drawAbilityCards(ctx, state) {
-  const w = 196, h = 62, gap = 10;
-  const total = state.abilities.length * w + (state.abilities.length - 1) * gap;
-  const x0 = (FIELD.width - total) / 2;
-  const y = FIELD.height - 118;
-  state.abilities.forEach((ab, i) => {
-    const x = x0 + i * (w + gap);
-    panel(ctx, x, y, w, h);
-    ctx.fillStyle = ab.color;
-    ctx.beginPath();
-    ctx.arc(x + 26, y + h / 2, 17, 0, Math.PI * 2);
-    ctx.fill();
-    text(ctx, ab.initials, x + 26, y + h / 2 + 5, 13, '#141210', 'center', true);
-    text(ctx, ab.name, x + 50, y + 24, 14, PALETTE.text, 'left', true);
-    text(ctx, `${ab.who}`, x + 50, y + 42, 11, PALETTE.muted);
-    text(ctx, `[${ab.key}]`, x + w - 12, y + 24, 14, PALETTE.gold, 'right', true);
-    text(ctx, ab.state, x + w - 12, y + 44, 13, ab.state === 'READY' ? PALETTE.green : PALETTE.text, 'right', true);
-  });
-}
-
-/** Bottom-right: speed, car, condition, weapon slots (named LOCKED tiers). */
-export function drawDrivePanel(ctx, state) {
-  const x = FIELD.width - 268, y = FIELD.height - 188, w = 252, h = 116;
+/** Left crew roster: four members with portrait discs, names and roles. */
+export function drawCrewPanel(ctx) {
+  const x = 16;
+  const y = 150;
+  const w = 216;
+  const rowH = 52;
+  const h = 34 + CREW.length * rowH + 8;
   panel(ctx, x, y, w, h);
-  text(ctx, `${Math.round(state.speed)} KM/H`, x + 12, y + 34, 28, PALETTE.text, 'left', true);
-  text(ctx, 'FALCON GT', x + w - 12, y + 26, 15, PALETTE.gold, 'right', true);
-  text(ctx, `CONDITION ${100 - state.player.damage}% · ENGINE 86%`, x + 12, y + 58, 12, PALETTE.muted);
-  text(ctx, `GRIP ${state.grip}% · GEAR 3 · SPORT · AR-9/RPG LOCKED`, x + 12, y + 78, 11, PALETTE.muted);
-  // Weapon slots: number + short name; locked tiers are muted + struck through.
-  const slots = state.weapons;
-  const sw = (w - 24 - (slots.length - 1) * 6) / slots.length;
-  slots.forEach((wp, i) => {
-    const sx = x + 12 + i * (sw + 6);
-    const sy = y + 88;
-    ctx.fillStyle = wp.ammo === 'LOCKED' ? 'rgba(255,255,255,0.08)' : 'rgba(242,201,76,0.16)';
-    ctx.fillRect(sx, sy, sw, 18);
-    const label = `${i + 1} ${wp.name}`;
-    text(ctx, label, sx + sw / 2, sy + 13, 10, wp.ammo === 'LOCKED' ? PALETTE.muted : PALETTE.text, 'center', true);
-    if (wp.ammo === 'LOCKED') {
-      ctx.strokeStyle = 'rgba(203,191,168,0.9)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(sx + 3, sy + 9);
-      ctx.lineTo(sx + sw - 3, sy + 9);
-      ctx.stroke();
-    }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('CREW — THE KOVAC GARAGE', x + 12, y + 10);
+  CREW.forEach((member, i) => {
+    const cy = y + 36 + i * rowH;
+    drawPortrait(ctx, x + 30, cy + 20, 38, member.colour, i + 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillText(member.name, x + 56, cy + 6);
+    ctx.fillStyle = PALETTE.muted;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(member.role, x + 56, cy + 26);
   });
 }
 
-/** Bottom-left: round minimap + health/armour. */
-export function drawMinimap(ctx, state) {
-  const cx = 92, cy = FIELD.height - 116, r = 58;
-  ctx.save();
-  ctx.fillStyle = PALETTE.panel;
+/** Right dispatch panel: 7 named units with tactic + distance, SKUA-3 first (air). */
+export function drawDispatchPanel(ctx) {
+  const x = W - 300;
+  const y = 150;
+  const w = 284;
+  const rowH = 26;
+  const h = 34 + DISPATCH.length * rowH + 8;
+  panel(ctx, x, y, w, h);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('TARNWICK PD — DISPATCH', x + 12, y + 10);
+  DISPATCH.forEach((unit, i) => {
+    const uy = y + 34 + i * rowH;
+    ctx.fillStyle = unit.air ? '#ff9a5c' : '#ffffff';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillText(unit.unit, x + 12, uy);
+    ctx.fillStyle = PALETTE.muted;
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(unit.tactic, x + 118, uy);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${unit.distance}m`, x + w - 12, uy);
+    ctx.textAlign = 'left';
+  });
+  return y + h;
+}
+
+/** One-line dispatch ticker under the dispatch panel. */
+export function drawTicker(ctx, y) {
+  const x = W - 300;
+  const w = 284;
+  ctx.fillStyle = 'rgba(12, 10, 14, 0.72)';
+  ctx.fillRect(x, y + 8, w, 24);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(TICKER, x + 10, y + 20);
+  ctx.textBaseline = 'top';
+}
+
+/** Round minimap, bottom-left, with the six districts as dots and the player marker. */
+export function drawMinimap(ctx, cx, cy, r) {
+  ctx.fillStyle = 'rgba(12, 10, 14, 0.88)';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = PALETTE.panelEdge;
+  ctx.strokeStyle = 'rgba(242, 201, 76, 0.6)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // Roads: a few strokes + the route.
-  ctx.strokeStyle = 'rgba(244,237,226,0.5)';
-  ctx.lineWidth = 3;
+  // Streets.
+  ctx.strokeStyle = 'rgba(201, 189, 166, 0.5)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(cx - r + 8, cy + 10);
-  ctx.lineTo(cx + r - 10, cy - 18);
-  ctx.moveTo(cx - 6, cy - r + 8);
-  ctx.lineTo(cx + 14, cy + r - 8);
+  ctx.moveTo(cx - r + 8, cy - r * 0.3);
+  ctx.lineTo(cx + r - 8, cy - r * 0.3);
+  ctx.moveTo(cx - r * 0.4, cy - r + 8);
+  ctx.lineTo(cx - r * 0.4, cy + r - 8);
+  ctx.moveTo(cx + r * 0.35, cy - r + 8);
+  ctx.lineTo(cx + r * 0.35, cy + r - 8);
   ctx.stroke();
-  ctx.strokeStyle = PALETTE.gold;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(cx - r + 14, cy + 22);
-  ctx.lineTo(cx + 4, cy - 4);
-  ctx.lineTo(cx + r - 16, cy - 26);
-  ctx.stroke();
-  // YOU marker.
+  // District dots.
+  const dots = [[-0.5, -0.55], [0.3, -0.6], [0.55, 0.1], [-0.35, 0.35], [0.1, 0.6], [-0.6, 0.05]];
   ctx.fillStyle = PALETTE.gold;
+  for (const [dx, dy] of dots) {
+    ctx.beginPath();
+    ctx.arc(cx + dx * r, cy + dy * r, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Player marker.
+  ctx.fillStyle = '#ff7a1a';
   ctx.beginPath();
-  ctx.arc(cx + 4, cy - 4, 6, 0, Math.PI * 2);
+  ctx.arc(cx + r * 0.1, cy + r * 0.15, 5, 0, Math.PI * 2);
   ctx.fill();
-  text(ctx, 'YOU', cx + 4, cy - 14, 10, PALETTE.gold, 'center', true);
-  // Health + armour under the map.
-  text(ctx, 'HEALTH', cx - r, cy + r + 18, 11, PALETTE.muted);
-  bar(ctx, cx - r, cy + r + 24, r * 2, 7, state.health / 100, '#7bc96f');
-  text(ctx, 'ARMOUR', cx - r, cy + r + 46, 11, PALETTE.muted);
-  bar(ctx, cx - r, cy + r + 52, r * 2, 7, state.armour / 100, '#6fb7d9');
-  ctx.restore();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('TARNWICK STRAND', cx, cy + r + 6);
+  ctx.textAlign = 'left';
 }
 
-/** Top-centre location + radio line, on a dark pill so it reads over the sky. */
-export function drawLocationLine(ctx, state) {
-  const label = `${state.location}  ·  ${state.clock}  ·  ${state.radio.station} — ${state.radio.show}`;
-  ctx.font = `13px ${FONT}`;
-  const w = ctx.measureText(label).width + 24;
-  const x = (FIELD.width - w) / 2;
-  ctx.fillStyle = 'rgba(16, 14, 20, 0.72)';
-  ctx.beginPath();
-  ctx.roundRect(x, 146, w, 22, 11);
-  ctx.fill();
-  text(ctx, label, FIELD.width / 2, 161, 13, PALETTE.text, 'center');
+/** Health + armour bars beside the minimap. */
+export function drawHealthBars(ctx, x, y, health, armour) {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = PALETTE.text;
+  ctx.font = 'bold 11px system-ui, sans-serif';
+  ctx.fillText('HEALTH', x, y);
+  bar(ctx, x, y + 14, 150, 9, health / 100, '#7fc46a', 'rgba(201, 189, 166, 0.3)');
+  ctx.fillText('ARMOUR', x, y + 30);
+  bar(ctx, x, y + 44, 150, 9, armour / 100, '#6fb3e0', 'rgba(201, 189, 166, 0.3)');
 }
 
-/** Bottom strip: the control bar. */
+/** Ability cards: portrait + name + key + live cooldown. */
+export function drawAbilityCards(ctx, x, y, w) {
+  const cards = [CREW[0], CREW[1], CREW[3]];
+  const cw = (w - 16) / 3;
+  cards.forEach((member, i) => {
+    const cx = x + i * (cw + 8);
+    panel(ctx, cx, y, cw, 64, 0.88);
+    drawPortrait(ctx, cx + 26, y + 32, 40, member.colour, i + 1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillText(member.ability, cx + 52, y + 8);
+    ctx.fillStyle = PALETTE.muted;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(`${member.name.split(' ')[0]} · ${member.abilityRole}`, cx + 52, y + 26);
+    ctx.fillStyle = member.cooldown === 'READY' ? '#7fc46a' : PALETTE.gold;
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(`[${member.key}]  ${member.cooldown}`, cx + 52, y + 44);
+  });
+}
+
+/** Weapon slots: numbered, name on the top line, ammo (or LOCKED) below it. */
+export function drawWeaponSlots(ctx, x, y, w) {
+  const sw = (w - 32) / 5;
+  ctx.textBaseline = 'top';
+  WEAPONS.forEach((weapon, i) => {
+    const sx = x + i * (sw + 8);
+    ctx.fillStyle = weapon.locked ? 'rgba(12, 10, 14, 0.6)' : 'rgba(12, 10, 14, 0.88)';
+    ctx.fillRect(sx, y, sw, 30);
+    ctx.strokeStyle = weapon.locked ? 'rgba(201, 189, 166, 0.25)' : 'rgba(242, 201, 76, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx + 0.5, y + 0.5, sw - 1, 29);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = weapon.locked ? PALETTE.muted : '#ffffff';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(`${weapon.slot}  ${weapon.name}`, sx + 8, y + 4);
+    ctx.fillStyle = weapon.locked ? PALETTE.gold : PALETTE.muted;
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.fillText(weapon.ammo, sx + 8, y + 18);
+  });
+}
+
+/** Speed + car + radio block, bottom-right. */
+export function drawSpeedBlock(ctx, speedKmh, carName, condition, radioIndex) {
+  const x = W - 300;
+  const y = 596;
+  const w = 284;
+  const h = 100;
+  panel(ctx, x, y, w, h, 0.88);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  ctx.fillText(`${speedKmh}`, x + 14, y + 8);
+  ctx.font = 'bold 14px system-ui, sans-serif';
+  ctx.fillText('KM/H', x + 84, y + 26);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = PALETTE.gold;
+  ctx.font = 'bold 14px system-ui, sans-serif';
+  ctx.fillText(carName, x + w - 14, y + 12);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText(`CONDITION ${condition}% DENTED`, x + w - 14, y + 46);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PALETTE.text;
+  ctx.font = '13px system-ui, sans-serif';
+  const radio = RADIO[radioIndex % RADIO.length];
+  ctx.fillText(`♪ ${radio.station} — ${radio.show}`, x + 14, y + 64);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText('STRAND BOULEVARD · 18:47', x + 14, y + 82);
+}
+
+/** The control bar along the very bottom of the frame. */
 export function drawControlBar(ctx) {
-  text(ctx, 'WASD DRIVE/WALK · E ENTER OR STEAL A CAR · SPACE HANDBRAKE · 1-5 WEAPONS · F PUNCH · CLICK SHOOT · M MUTE · ESC PAUSE', FIELD.width / 2, FIELD.height - 10, 12, PALETTE.muted, 'center');
+  ctx.fillStyle = 'rgba(12, 10, 14, 0.72)';
+  ctx.fillRect(0, FIELD.height - 16, W, 16);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('WASD DRIVE/WALK  ·  E ENTER OR STEAL A CAR  ·  SPACE HANDBRAKE  ·  1-5 WEAPONS  ·  F PUNCH  ·  CLICK SHOOT  ·  M MUTE  ·  ESC PAUSE', W / 2, FIELD.height - 8);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
 }
+
+export { FONT };

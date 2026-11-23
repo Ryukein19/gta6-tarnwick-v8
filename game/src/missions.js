@@ -1,48 +1,50 @@
-// The eight story jobs in five acts. "Come Home": Renn Kovacs returns after six
-// years; brother Tam died on a smuggling run; sister Sena runs the Kovac Garage;
-// fixer Uncle Bram; antagonist Capt. Elias Dray; rival crew GREYLINE. No Rockstar
-// names, places or characters anywhere.
-
+// The 8 story jobs and the 5-act arc. Each mission names its act, its objective and
+// its district; the cover stages JOB 6/8 — THE CAPTAIN'S CAR — with the timer at 1:47
+// and the sedan at 58%. Nothing here draws or touches the browser.
 import { MISSIONS } from './config.js';
 
-/** Mission by job number (1..8). */
-export function missionByJob(job) {
-  return MISSIONS.find((m) => m.job === job) ?? MISSIONS[0];
-}
-
-/** Act label for a job: "ACT 3/5". */
-export function actLabel(job) {
-  const m = missionByJob(job);
-  return `ACT ${m.act}/5`;
-}
-
-/** The five acts, with their jobs, for the pause-menu progress bars. */
-export const ACTS = [
-  { act: 1, name: 'HOMECOMING', jobs: [1, 2] },
-  { act: 2, name: 'DEBTS', jobs: [3, 4] },
-  { act: 3, name: 'THE WAKE', jobs: [5, 6] },
-  { act: 4, name: 'TAKEDOWN', jobs: [7] },
-  { act: 5, name: 'COME HOME', jobs: [8] },
-];
-
-/** Progress summary for the pause menu: story jobs done, races, stunts, collectibles. */
-export const CAREER = {
-  storyDone: 5,
-  storyTotal: 8,
-  racesDone: 2,
-  racesTotal: 4,
-  stuntsDone: 3,
-  stuntsTotal: 8,
-  collectiblesDone: 9,
-  collectiblesTotal: 20,
-  districtJobsDone: 5,
-  districtJobsTotal: 7,
-  crewDone: 3,
-  crewTotal: 3,
-  carsStolen: 37,
-  copsEscaped: 9,
-  kmDriven: 61.4,
-  peopleOut: 17,
-  longestJump: 34,
-  nextGoal: 'Wreck Dray\'s sedan — JOB 6/8 · THE CAPTAIN\'S CAR',
+export const ACT_NAMES = {
+  1: 'ACT I — HOMECOMING',
+  2: 'ACT II — LOW TIDE',
+  3: 'ACT III — PAPER MOON',
+  4: 'ACT IV — SMOKE',
+  5: 'ACT V — COME HOME',
 };
+
+export function missionById(id) {
+  return MISSIONS.find((m) => m.id === id) ?? MISSIONS[0];
+}
+
+export function actName(act) {
+  return ACT_NAMES[act] ?? `ACT ${act}`;
+}
+
+/** The mission line for the cover panel: job number, name, stage, objective, next step. */
+export function coverMission() {
+  const m = MISSIONS[5];
+  return {
+    job: 'JOB 6/8',
+    name: m.name,
+    stage: 'STAGE 2/4',
+    objective: m.objective,
+    next: 'Leave it smoking on the Strand',
+    timer: '1:47',
+    day: 'DAY 6',
+    clock: '18:47',
+  };
+}
+
+/** The on-foot mission line for the Lantern Mile shot. */
+export function footMission() {
+  const m = MISSIONS[2];
+  return {
+    job: 'JOB 3/8',
+    name: m.name,
+    stage: 'STAGE 1/3',
+    objective: m.objective,
+    next: 'Three stalls left on the row',
+    timer: '4:12',
+    day: 'DAY 3',
+    clock: '21:05',
+  };
+}

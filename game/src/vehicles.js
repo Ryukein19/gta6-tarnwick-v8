@@ -1,150 +1,147 @@
-// Drawing cars, scooters and people in canvas 2D. A car is a body with a cabin,
-// windows, wheels, a spoiler and a plate, drawn at (x, y) with width w — the
-// projection decides how big w is, so the same code draws the hero Falcon GT
-// large in the foreground and a traffic car small near the horizon.
+// Drawing cars in 2D. Every car is a small set of flat shapes — body, cabin, windows,
+// wheels, plate, damage — drawn at a projected position and scale, so the same code
+// draws the hero Falcon GT at 25% of the frame and a traffic car near the horizon.
+// The hero is drawn from the rear-three-quarter: wide orange body, spoiler, TAM-6 plate,
+// a dented rear panel and a smoke wisp.
+import { project } from './geom.js';
+import { HERO } from './config.js';
 
-/** Draw a car facing away from the camera (rear view). y is the ground line. */
-export function drawCar(ctx, x, y, w, color, opts = {}) {
+/** Draw a car seen from behind at the given world position. widthM is the car's width in metres. */
+export function drawCar(ctx, lateral, depth, widthM, colour, opts = {}) {
+  const p = project(lateral, 0, depth);
+  const boost = opts.scaleBoost ?? 1;
+  const w = widthM * 150 * p.s * boost;
   const h = w * 0.42;
-  const bodyH = h * 0.62;
-  const dark = opts.dark ?? '#1c1a18';
-  ctx.save();
-  ctx.translate(x, y);
-  // Shadow.
-  ctx.fillStyle = 'rgba(20, 12, 8, 0.4)';
+  const x = p.x - w / 2;
+  const y = p.y - h;
+  const dented = opts.dented === true;
+  const smoke = opts.smoke === true;
+
+  // Shadow on the road.
+  ctx.fillStyle = 'rgba(20, 12, 8, 0.45)';
   ctx.beginPath();
-  ctx.ellipse(0, 2, w * 0.52, h * 0.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(p.x, p.y + 2 * p.s, w * 0.52, h * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
+
   // Body.
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(-w / 2, 0);
-  ctx.lineTo(-w / 2 + w * 0.04, -bodyH * 0.7);
-  ctx.lineTo(-w * 0.36, -bodyH);
-  ctx.lineTo(w * 0.36, -bodyH);
-  ctx.lineTo(w / 2 - w * 0.04, -bodyH * 0.7);
-  ctx.lineTo(w / 2, 0);
-  ctx.closePath();
+  ctx.fillStyle = colour;
+  roundRect(ctx, x, y + h * 0.3, w, h * 0.7, h * 0.16);
   ctx.fill();
-  // Cabin + rear window.
-  ctx.fillStyle = dark;
-  ctx.beginPath();
-  ctx.moveTo(-w * 0.32, -bodyH * 0.98);
-  ctx.lineTo(-w * 0.26, -h * 0.98);
-  ctx.lineTo(w * 0.26, -h * 0.98);
-  ctx.lineTo(w * 0.32, -bodyH * 0.98);
-  ctx.closePath();
+  // Cabin + windows.
+  ctx.fillStyle = shade(colour, -18);
+  roundRect(ctx, x + w * 0.14, y, w * 0.66, h * 0.42, h * 0.12);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255, 220, 160, 0.35)';
-  ctx.fillRect(-w * 0.24, -h * 0.96, w * 0.48, h * 0.1);
-  // Spoiler.
-  if (opts.spoiler) {
-    ctx.fillStyle = dark;
-    ctx.fillRect(-w * 0.42, -h * 1.06, w * 0.84, h * 0.05);
-    ctx.fillRect(-w * 0.4, -h * 0.98, w * 0.03, h * 0.1);
-    ctx.fillRect(w * 0.37, -h * 0.98, w * 0.03, h * 0.1);
-  }
-  // Tail lights.
-  ctx.fillStyle = '#ff3b30';
-  ctx.fillRect(-w * 0.46, -bodyH * 0.42, w * 0.14, h * 0.09);
-  ctx.fillRect(w * 0.32, -bodyH * 0.42, w * 0.14, h * 0.09);
+  ctx.fillStyle = 'rgba(30, 42, 58, 0.9)';
+  roundRect(ctx, x + w * 0.2, y + h * 0.06, w * 0.54, h * 0.26, h * 0.08);
+  ctx.fill();
+  // Rear lights.
+  ctx.fillStyle = '#ff2e2e';
+  ctx.fillRect(x + w * 0.04, y + h * 0.52, w * 0.16, h * 0.1);
+  ctx.fillRect(x + w * 0.8, y + h * 0.52, w * 0.16, h * 0.1);
+  // Wheels.
+  ctx.fillStyle = '#14100e';
+  ctx.fillRect(x + w * 0.06, y + h * 0.86, w * 0.16, h * 0.16);
+  ctx.fillRect(x + w * 0.78, y + h * 0.86, w * 0.16, h * 0.16);
   // Plate.
-  if (opts.plate) {
-    ctx.fillStyle = '#f4ede2';
-    ctx.fillRect(-w * 0.13, -bodyH * 0.34, w * 0.26, h * 0.14);
+  if (w > 46) {
+    ctx.fillStyle = '#f5efe4';
+    ctx.fillRect(x + w * 0.4, y + h * 0.62, w * 0.2, h * 0.14);
     ctx.fillStyle = '#1c1a18';
-    ctx.font = `bold ${Math.max(8, h * 0.11)}px system-ui, sans-serif`;
+    ctx.font = `bold ${Math.max(7, h * 0.11)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(opts.plate, 0, -bodyH * 0.27);
+    ctx.fillText(opts.plate ?? '', x + w * 0.5, y + h * 0.69);
   }
-  // Wheels.
-  ctx.fillStyle = '#141210';
-  ctx.fillRect(-w * 0.48, -h * 0.16, w * 0.09, h * 0.2);
-  ctx.fillRect(w * 0.39, -h * 0.16, w * 0.09, h * 0.2);
-  // Damage dents.
-  if (opts.damage) {
-    ctx.strokeStyle = 'rgba(20, 14, 10, 0.7)';
-    ctx.lineWidth = Math.max(1, w * 0.008);
+  // Dented rear panel + smoke wisp.
+  if (dented) {
+    ctx.fillStyle = 'rgba(20, 16, 12, 0.5)';
     ctx.beginPath();
-    ctx.moveTo(-w * 0.3, -bodyH * 0.5);
-    ctx.lineTo(-w * 0.18, -bodyH * 0.62);
-    ctx.lineTo(-w * 0.08, -bodyH * 0.48);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/** Smoke wisp above a damaged car or a burning wreck. */
-export function drawSmoke(ctx, x, y, s, time) {
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  for (let i = 0; i < 3; i += 1) {
-    const drift = Math.sin(time * 1.4 + i * 2.1) * 8 * s;
-    const r = (10 + i * 9) * s;
-    ctx.fillStyle = i === 2 ? 'rgba(90, 80, 70, 0.5)' : 'rgba(120, 110, 100, 0.45)';
-    ctx.beginPath();
-    ctx.arc(x + drift, y - (14 + i * 16) * s, r, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.72, y + h * 0.5, w * 0.12, h * 0.16, 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.restore();
-}
-
-/** Flames licking out of a burning wreck. */
-export function drawFlame(ctx, x, y, s, time) {
-  ctx.save();
-  for (let i = 0; i < 3; i += 1) {
-    const flick = Math.sin(time * 9 + i * 2.4) * 4 * s;
-    ctx.fillStyle = i === 0 ? '#ff9e2a' : i === 1 ? '#ff6a1a' : '#ffd94c';
+  if (smoke) {
+    ctx.fillStyle = 'rgba(220, 220, 220, 0.35)';
     ctx.beginPath();
-    ctx.moveTo(x - (16 - i * 4) * s, y);
-    ctx.quadraticCurveTo(x + flick, y - (34 - i * 7) * s, x + (16 - i * 4) * s, y);
-    ctx.closePath();
+    ctx.ellipse(x + w * 0.82, y - h * 0.28, w * 0.09, h * 0.2, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(220, 220, 220, 0.22)';
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.86, y - h * 0.55, w * 0.13, h * 0.26, 0.2, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.restore();
+  return { x, y, w, h };
 }
 
-/** A scooter with a rider, side view. */
-export function drawScooter(ctx, x, y, w, color) {
-  const h = w * 0.55;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(-w * 0.32, -h * 0.18, w * 0.16, 0, Math.PI * 2);
-  ctx.arc(w * 0.32, -h * 0.18, w * 0.16, 0, Math.PI * 2);
-  ctx.fill();
+/** The hero Falcon GT: whole, large, centred, spoiler on top, TAM-6 plate, smoke wisp.
+ * The camera car is drawn 1.65x the perspective scale so it reads ~25% of the frame
+ * wide at its road position (base y ~548, above the HUD strip). */
+export function drawHero(ctx, lateral, depth) {
+  const p = project(lateral, 0, depth);
+  const w = 2.1 * 150 * p.s * 1.65;
+  const h = w * 0.42;
+  const x = p.x - w / 2;
+  const y = p.y - h;
+  drawCar(ctx, lateral, depth, 2.1, HERO.colour, { dented: true, smoke: true, plate: HERO.plate, scaleBoost: 1.65 });
+  // Spoiler.
   ctx.fillStyle = '#1c1a18';
-  ctx.beginPath();
-  ctx.arc(-w * 0.32, -h * 0.18, w * 0.07, 0, Math.PI * 2);
-  ctx.arc(w * 0.32, -h * 0.18, w * 0.07, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = color;
-  ctx.fillRect(-w * 0.28, -h * 0.42, w * 0.6, h * 0.16);
-  ctx.fillStyle = '#e8e0d0';
-  ctx.beginPath();
-  ctx.arc(0, -h * 0.85, w * 0.13, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#3a4a5a';
-  ctx.fillRect(-w * 0.08, -h * 0.72, w * 0.16, h * 0.34);
-  ctx.restore();
+  ctx.fillRect(x + w * 0.06, y + h * 0.08, w * 0.88, h * 0.07);
+  ctx.fillRect(x + w * 0.1, y + h * 0.14, w * 0.05, h * 0.12);
+  ctx.fillRect(x + w * 0.85, y + h * 0.14, w * 0.05, h * 0.12);
+  // Brake glow.
+  ctx.fillStyle = 'rgba(255, 46, 46, 0.85)';
+  ctx.fillRect(x + w * 0.04, y + h * 0.5, w * 0.2, h * 0.12);
+  ctx.fillRect(x + w * 0.76, y + h * 0.5, w * 0.2, h * 0.12);
+  return { x, y, w, h };
 }
 
-/** A pedestrian: head, shirt, legs, walking. */
-export function drawPed(ctx, x, y, s, shirt, walk) {
-  const h = 34 * s + 8;
-  ctx.save();
-  ctx.translate(x, y);
-  const swing = Math.sin(walk) * 3 * s;
-  ctx.fillStyle = '#2a2118';
-  ctx.fillRect(-3 * s - swing, -h * 0.28, 3 * s, h * 0.28);
-  ctx.fillRect(swing, -h * 0.28, 3 * s, h * 0.28);
-  ctx.fillStyle = shirt;
-  ctx.fillRect(-6 * s, -h * 0.72, 12 * s, h * 0.46);
-  ctx.fillStyle = '#e8c9a0';
+/** A police cruiser: black-and-white body, light bar, "TARNWICK PD" on the rear. */
+export function drawCruiser(ctx, lateral, depth) {
+  const r = drawCar(ctx, lateral, depth, 2.0, '#20242c', { plate: 'TPD' });
+  ctx.fillStyle = '#e8e4da';
+  ctx.fillRect(r.x + r.w * 0.08, r.y + r.h * 0.3, r.w * 0.84, r.h * 0.22);
+  // Light bar.
+  ctx.fillStyle = '#ff2e2e';
+  ctx.fillRect(r.x + r.w * 0.3, r.y - r.h * 0.06, r.w * 0.18, r.h * 0.1);
+  ctx.fillStyle = '#2e7fe5';
+  ctx.fillRect(r.x + r.w * 0.52, r.y - r.h * 0.06, r.w * 0.18, r.h * 0.1);
+  return r;
+}
+
+/** Dray's black sedan, the mission target: sleek, black, 58% health. */
+export function drawSedan(ctx, lateral, depth) {
+  return drawCar(ctx, lateral, depth, 2.05, '#14161c', { plate: 'DRAY-1' });
+}
+
+/** A burning car: dark body, orange flame licks, grey smoke column. */
+export function drawBurningCar(ctx, lateral, depth, t) {
+  const r = drawCar(ctx, lateral, depth, 1.9, '#2b2b2e', {});
+  const flick = 0.7 + 0.3 * Math.sin(t * 9 + lateral * 5);
+  ctx.fillStyle = `rgba(255, ${Math.floor(120 + 60 * flick)}, 20, 0.9)`;
   ctx.beginPath();
-  ctx.arc(0, -h * 0.84, 5 * s + 2, 0, Math.PI * 2);
+  ctx.ellipse(r.x + r.w * 0.5, r.y - r.h * 0.2, r.w * 0.2 * flick, r.h * 0.5 * flick, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
+  ctx.fillStyle = 'rgba(60, 60, 66, 0.5)';
+  ctx.beginPath();
+  ctx.ellipse(r.x + r.w * 0.5, r.y - r.h * 0.9, r.w * 0.24, r.h * 0.55, 0.15, 0, Math.PI * 2);
+  ctx.fill();
+  return r;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function shade(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.max(0, (n >> 16) + amount));
+  const g = Math.min(255, Math.max(0, ((n >> 8) & 255) + amount));
+  const b = Math.min(255, Math.max(0, (n & 255) + amount));
+  return `rgb(${r}, ${g}, ${b})`;
 }

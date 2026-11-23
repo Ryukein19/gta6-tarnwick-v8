@@ -1,63 +1,66 @@
-// The city of Tarnwick: six districts, sun-soaked pastel buildings lining both
-// sides of the Strand, palms and lamps. Buildings are generated from the seeded
-// random so the same seed always draws the same skyline.
-
+// The city of Tarnwick: six districts along one boulevard, generated once per seed.
+// Buildings line both sides of the Strand, palms and lamps dot the sidewalks, and a
+// far skyline sits on the horizon. Everything is data — the renderer draws it. No
+// drawing and no browser in this file.
 import { DISTRICTS, PALETTE } from './config.js';
 import { pick, range } from './random.js';
-import { groundY, scaleAt, sidewalkAt } from './geom.js';
 
-/** One building: which side of the road, how far down it, how tall and wide. */
-function makeBuilding(random, side, index) {
-  const t = 0.08 + index * 0.055 + random() * 0.03;
-  const s = scaleAt(t);
-  const base = pick(random, PALETTE.building);
-  const dark = pick(random, PALETTE.buildingDark);
-  return {
-    side,
-    t,
-    x: 0, // filled in by layout()
-    y: groundY(t),
-    w: (90 + random() * 70) * s + 26,
-    h: (150 + random() * 190) * s + 30,
-    color: base,
-    dark,
-    floors: 3 + Math.floor(random() * 5),
-    lit: random() < 0.55,
-  };
-}
+const BUILDING_COLOURS = [
+  PALETTE.buildingCream,
+  PALETTE.buildingPeach,
+  PALETTE.buildingTeal,
+  PALETTE.buildingRose,
+];
 
-/** Lay buildings out along both sidewalks, farthest first so near ones overlap. */
-export function buildCity(random) {
-  const buildings = [];
-  for (let side = -1; side <= 1; side += 2) {
-    for (let index = 0; index < 14; index += 1) {
-      buildings.push(makeBuilding(random, side, index));
+/**
+ * Build the city for a seed. Returns:
+ * near: buildings close to the road, each { side (-1 left, 1 right), depth, widthM, heightM, colour, lit }
+ * far: skyline blocks on the horizon, each { x, width, height, colour }
+ * palms: { side, depth, heightM } and lamps: { side, depth } along the sidewalks.
+ */
+export function createCity(random) {
+  const near = [];
+  const far = [];
+  const palms = [];
+  const lamps = [];
+
+  // Near buildings: two rows, one per side, receding from depth 0.08 to 0.95.
+  for (const side of [-1, 1]) {
+    let depth = 0.06;
+    while (depth < 0.95) {
+      const widthM = range(random, 2.2, 4.6);
+      const heightM = range(random, 1.6, 4.4);
+      near.push({
+        side,
+        depth,
+        widthM,
+        heightM,
+        colour: pick(random, BUILDING_COLOURS),
+        lit: random() < 0.55,
+        district: DISTRICTS[Math.floor(random() * DISTRICTS.length)].name,
+      });
+      depth += range(random, 0.09, 0.16);
     }
   }
-  for (const b of buildings) {
-    const strip = sidewalkAt(b.t, b.side);
-    const outer = b.side < 0 ? strip[0] : strip[1];
-    b.x = b.side < 0 ? outer - b.w + range(random, 0, 20) : outer - range(random, 0, 20);
-  }
-  buildings.sort((a, b) => b.t - a.t);
-  const palms = [];
-  for (let index = 0; index < 10; index += 1) {
-    const side = index % 2 === 0 ? -1 : 1;
-    const t = 0.12 + index * 0.085;
-    const strip = sidewalkAt(t, side);
-    palms.push({ x: side < 0 ? strip[0] + 12 : strip[1] - 12, y: groundY(t), s: scaleAt(t), side });
-  }
-  const lamps = [];
-  for (let index = 0; index < 8; index += 1) {
-    const side = index % 2 === 0 ? 1 : -1;
-    const t = 0.16 + index * 0.1;
-    const strip = sidewalkAt(t, side);
-    lamps.push({ x: side < 0 ? strip[1] - 6 : strip[0] + 6, y: groundY(t), s: scaleAt(t) });
-  }
-  return { buildings, palms, lamps, districts: DISTRICTS };
-}
 
-/** District lookup by name (for the pause-menu map). */
-export function districtByName(name) {
-  return DISTRICTS.find((d) => d.name === name) ?? DISTRICTS[0];
+  // Far skyline: a row of blocks strung across the horizon.
+  let x = -40;
+  while (x < 1320) {
+    const width = range(random, 46, 130);
+    const height = range(random, 26, 92);
+    far.push({ x, width, height, colour: pick(random, [PALETTE.skylineFar, PALETTE.skylineNear]) });
+    x += width + range(random, 2, 18);
+  }
+
+  // Palms and lamps along both sidewalks.
+  for (const side of [-1, 1]) {
+    let depth = 0.1;
+    while (depth < 0.9) {
+      if (random() < 0.6) palms.push({ side, depth, heightM: range(random, 2.2, 3.4) });
+      if (random() < 0.7) lamps.push({ side, depth, lit: true });
+      depth += range(random, 0.11, 0.2);
+    }
+  }
+
+  return { near, far, palms, lamps };
 }

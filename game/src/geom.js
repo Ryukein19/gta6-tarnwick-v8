@@ -1,61 +1,47 @@
-// Perspective projection for the pseudo-3D chase: the road converges on a
-// vanishing point at the golden-hour horizon. Depth t runs 0 (the camera, at the
-// bottom of the frame) to 1 (the horizon). Everything on the ground plane —
-// traffic, pedestrians, buildings — is placed with project() so near things are
-// big and far things shrink toward the vanishing point.
-//
-//   scale(t)  = (1 - t)^1.6        object scale at depth t
-//   screenY(t)= horizon + (ground - horizon) * (1 - t)^2
-//   roadX(t, lane): lane -1 (left kerb) .. 1 (right kerb), centre 640
-
+// Perspective projection for the pseudo-3D chase view. The road runs from the camera
+// (bottom of the screen, depth 0) to the horizon (depth 1). A point is given by its
+// lateral offset from the road centre in metres, its height above the road in metres,
+// and its depth. Near things are big and low on the screen; far things are small and
+// sit on the horizon line. y = horizon + (ground − horizon) · nearness, so depth 1
+// always lands exactly on the horizon and depth 0 exactly on the bottom edge.
 import { FIELD } from './config.js';
 
-const VANISH_X = FIELD.width / 2;
-const HALF_ROAD_NEAR = 500;
-const HALF_ROAD_FAR = 80;
+const HORIZON = FIELD.horizonY;
+const GROUND = FIELD.groundY;
+const CENTRE_X = FIELD.width / 2;
 
-/** Scale of an object standing at depth t (1 at the camera, 0 at the horizon). */
-export function scaleAt(t) {
-  const clamped = Math.min(1, Math.max(0, t));
-  return Math.pow(1 - clamped, 1.6);
+/**
+ * Project a world point to the screen.
+ * lateral: metres from the road centre (negative = left, positive = right).
+ * height: metres above the road surface.
+ * depth: 0 at the camera, 1 at the horizon.
+ * Returns { x, y, s } where s is the perspective scale (1 at the camera, ~0.06 at the horizon).
+ */
+export function project(lateral, height, depth) {
+  const d = Math.min(1, Math.max(0, depth));
+  const nearness = 1 - d;
+  const curve = Math.pow(nearness, 1.45);
+  const s = 0.06 + 0.94 * curve;
+  const x = CENTRE_X + lateral * 150 * s;
+  const y = HORIZON + (GROUND - HORIZON) * curve - height * 95 * s;
+  return { x, y, s };
 }
 
-/** Screen y of a point on the ground plane at depth t. */
-export function groundY(t) {
-  const clamped = Math.min(1, Math.max(0, t));
-  return FIELD.horizonY + (FIELD.groundY - FIELD.horizonY) * Math.pow(1 - clamped, 2);
+/** How wide the road is on screen at a given depth (half-width, in pixels). Consistent
+ * with project(): the road is 7.2 m across, so its half-width is 3.6 * 150 * scale. */
+export function roadHalfWidth(depth) {
+  const d = Math.min(1, Math.max(0, depth));
+  const nearness = 1 - d;
+  return 540 * (0.06 + 0.94 * Math.pow(nearness, 1.45));
 }
 
-/** Screen x of a point at depth t and road lane (-1 left kerb .. 1 right kerb). */
-export function roadX(t, lane) {
-  const clamped = Math.min(1, Math.max(0, t));
-  const half = HALF_ROAD_FAR + (HALF_ROAD_NEAR - HALF_ROAD_FAR) * (1 - clamped);
-  return VANISH_X + lane * half;
+/** Screen y of the road surface at a given depth (height 0). */
+export function roadY(depth) {
+  const d = Math.min(1, Math.max(0, depth));
+  return HORIZON + (GROUND - HORIZON) * Math.pow(1 - d, 1.45);
 }
 
-/** Full projection: {x, y, s} for a ground-plane point at depth t, lane. */
-export function project(t, lane) {
-  return { x: roadX(t, lane), y: groundY(t), s: scaleAt(t) };
-}
-
-/** X of the left/right road edge at depth t. */
-export function roadEdge(t, side) {
-  return roadX(t, side < 0 ? -1 : 1);
-}
-
-/** The road's left and right edges as screen polygons (for filling the asphalt). */
-export function roadPolygon() {
-  return [
-    [roadEdge(0, -1), FIELD.groundY],
-    [roadEdge(1, -1), FIELD.horizonY],
-    [roadEdge(1, 1), FIELD.horizonY],
-    [roadEdge(0, 1), FIELD.groundY],
-  ];
-}
-
-/** Sidewalk strip beside the road at depth t: [innerX, outerX] for a side. */
-export function sidewalkAt(t, side) {
-  const edge = roadEdge(t, side);
-  const width = 90 * scaleAt(t) + 14;
-  return side < 0 ? [edge - width, edge] : [edge, edge + width];
+/** The horizon line's screen y. */
+export function horizonY() {
+  return HORIZON;
 }

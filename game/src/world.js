@@ -1,101 +1,72 @@
-// The game's rules and state, with no drawing and no browser in it: Renn's
-// Falcon GT, the traffic, the police helicopter, the mission timer, money, rank
-// and the day clock. step() advances one fixed step; the renderer paints the
-// state. Nothing here allocates after createWorld returns.
+// The world's rules and state, with no drawing and no browser in it: the player car,
+// traffic, police, pedestrians, the mission clock and the staged money. step() advances
+// one fixed step and returns what happened as bit flags, so the caller can react without
+// the world knowing about screens or sound. Nothing here allocates after createWorld
+// returns (the pools are allocated once, at boot).
+import { FIELD, STEP, MISSIONS, MONEY, RANK, HERO } from './config.js';
+import { createTraffic } from './traffic.js';
+import { createPolice } from './police.js';
+import { createPlayer } from './player.js';
 
-import { ABILITIES, CREW, DISPATCH, MISSIONS, RADIO, STEP, WEAPONS } from './config.js';
-import { buildCity } from './city.js';
-import { spawnPed, spawnTraffic } from './traffic.js';
-
-export const EVENT_NONE = 0;
-export const EVENT_TIMER_END = 1;
+export const EVENT_ESCAPED = 1;
 export const EVENT_WRECKED = 2;
+export const EVENT_CAUGHT = 4;
 
+/**
+ * The live chase state for JOB 6/8 — THE CAPTAIN'S CAR. The timer counts down from
+ * 1:47; the sedan's health starts at 58% and falls as the player rams it; the wanted
+ * level holds at 4 stars while the helicopter keeps its spotlight on the road.
+ */
 export function createWorld(random) {
-  const city = buildCity(random);
+  const player = createPlayer();
+  const traffic = createTraffic(random);
+  const police = createPolice(random);
   const state = {
-    time: 0,
-    day: 6,
-    clock: '18:47',
-    money: 24600,
-    rank: 'SHOT CALLER',
-    rankCur: 840,
-    rankMax: 1200,
-    jobsDone: 5,
-    speed: 112,
-    health: 82,
-    armour: 64,
-    wanted: 4,
+    player: player.state,
+    traffic: traffic.state,
+    police: police.state,
     mission: MISSIONS[5],
     missionStage: 2,
     missionStages: 4,
-    missionProgress: 58,
-    timer: 107, // 1:47
-    location: 'TARNWICK STRAND — Strand Boulevard',
-    radio: RADIO[0],
-    weather: 'CLEAR · 21°C · WIND 6',
-    grip: 50,
-    traffic: [],
-    peds: [],
-    heli: { x: 640, y: 92, rotor: 0, spotlightX: 700, spotlightY: 430 },
-    player: { lane: 0.28, speed: 112, damage: 38, nitro: 1, onFoot: false },
-    dialogue: null,
-    crew: CREW,
-    dispatch: DISPATCH,
-    abilities: ABILITIES,
-    weapons: WEAPONS,
-    mode: 'chase',
-    seed: 0,
+    timerSeconds: 107,
+    day: 6,
+    clock: '18:47',
+    money: MONEY,
+    rank: RANK,
+    speedKmh: HERO.speedKmh,
+    sedanHealth: 58,
+    elapsed: 0,
+    distanceKm: 0,
   };
 
   function reset() {
-    state.time = 0;
-    state.timer = 107;
-    state.speed = 112;
-    state.traffic = [];
-    state.peds = [];
-    for (let i = 0; i < 7; i += 1) state.traffic.push(spawnTraffic(random, 0.15 + i * 0.11));
-    for (let i = 0; i < 6; i += 1) state.peds.push(spawnPed(random, 0.2 + i * 0.12));
-    state.dialogue = {
-      initials: 'IV',
-      name: 'ILYA VANE',
-      role: 'GREYLINE lieutenant',
-      color: '#e5534b',
-      line: 'Dray\'s sedan is on the boulevard at sunset. Wreck it — make him walk home.',
-    };
+    player.reset();
+    traffic.reset();
+    police.reset();
+    state.timerSeconds = 107;
+    state.sedanHealth = 58;
+    state.elapsed = 0;
+    state.distanceKm = 0;
+    state.speedKmh = HERO.speedKmh;
   }
 
-  function step(dt, direction, harmless) {
-    state.time += dt;
-    state.heli.rotor += dt * 22;
-    state.heli.spotlightX = 700 + Math.sin(state.time * 0.7) * 40;
-    if (!harmless && state.timer > 0) state.timer = Math.max(0, state.timer - dt);
-    // The player drifts across lanes; traffic rolls toward the camera.
-    state.player.lane = Math.max(-0.8, Math.min(0.8, state.player.lane + direction * dt * 0.9));
-    state.speed = Math.max(0, Math.min(168, state.speed + (harmless ? 0 : (direction === 0 ? -2 : 0) * dt)));
-    for (const car of state.traffic) {
-      car.t -= dt * 0.055;
-      if (car.t <= 0.04) {
-        const fresh = spawnTraffic(random, 0.95);
-        car.t = fresh.t;
-        car.lane = fresh.lane;
-        car.color = fresh.color;
-        car.kind = fresh.kind;
-      }
+  function step(dt, direction) {
+    let events = 0;
+    state.elapsed += dt;
+    state.timerSeconds = Math.max(0, state.timerSeconds - dt);
+    state.distanceKm += (state.speedKmh / 3600) * dt;
+    player.step(dt, direction);
+    traffic.step(dt, state.speedKmh);
+    police.step(dt);
+    // The hero nudges Dray's sedan: its health ticks down while the chase holds.
+    if (state.elapsed > 2 && Math.floor(state.elapsed * 2) !== Math.floor((state.elapsed - dt) * 2)) {
+      state.sedanHealth = Math.max(12, state.sedanHealth - 1);
     }
-    for (const ped of state.peds) {
-      ped.t -= dt * 0.02;
-      if (ped.t <= 0.06) {
-        const fresh = spawnPed(random, 0.95);
-        ped.t = fresh.t;
-        ped.lane = fresh.lane;
-        ped.color = fresh.color;
-      }
-    }
-    if (state.timer === 0) return EVENT_TIMER_END;
-    return EVENT_NONE;
+    if (state.sedanHealth <= 12) events |= EVENT_WRECKED;
+    if (state.timerSeconds <= 0) events |= EVENT_ESCAPED;
+    return events;
   }
 
   reset();
-  return { state, city, reset, step, STEP };
+  return { state, reset, step };
 }
