@@ -1,15 +1,20 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
+// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s
+// steps (several in a slow frame, none in a fast one), and the renderer paints what is
+// there. The game moves between four screens: title, play, paused and game over, plus the
+// foot scene (the night market, on foot).
 //
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
+// ?seed=N fixes the layout. ?shot=chase|foot|menu|title (with &seed=N) stages that scene
 // instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
+
+import { BEST_KEY, STEP } from './config.js';
 import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
+import { createWorld, EVENT_JOB_DONE } from './world.js';
+import {
+  ACTION_CONFIRM, ACTION_PAUSE, ACTION_RADIO, ACTION_MUTE, createInput,
+} from './input.js';
 import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 import { stageShot } from './shots.js';
+import { blip, setStation, toggleMute } from './audio.js';
 
 /** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
 const MAX_FRAME = 0.25;
@@ -44,7 +49,7 @@ function runShot(name) {
   const scene = stageShot(name, world);
   let painted = 0;
   function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
+    renderer.draw(world.state, scene.screen, scene.best, seed);
     painted += 1;
     if (painted < 2) requestAnimationFrame(paint);
     else window.__shotReady = true;
@@ -59,7 +64,7 @@ function runGame() {
   let accumulator = 0;
   let last = performance.now();
 
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
+  // Screen readers (and anyone watching the page's text) hear the screen changes.
   function announce(message) {
     status.textContent = message;
   }
@@ -68,20 +73,29 @@ function runGame() {
     world.reset();
     accumulator = 0;
     screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
+    blip(660, 0.1);
+    announce('Playing. Job 6 of 8: The Captain\u2019s Car. Wreck Dray\u2019s sedan.');
   }
 
   function endGame() {
     screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
+    if (world.state.money > best) {
+      best = world.state.money;
       saveBest(best);
     }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
+    announce(`Busted. Tarnwick PD caught you. Best $${best}.`);
   }
 
   function handleActions() {
     const actions = input.takeActions();
+    if (actions & ACTION_RADIO) {
+      const station = setStation(1);
+      announce(`Radio: ${station.freq} — ${station.show}.`);
+    }
+    if (actions & ACTION_MUTE) {
+      toggleMute();
+      announce('Muted.');
+    }
     if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
     else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
@@ -93,13 +107,12 @@ function runGame() {
   }
 
   function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
+    if (screen === SCREEN_TITLE) return;
+    const events = world.step(STEP, input.direction(), input.throttle());
+    if (events & EVENT_JOB_DONE) {
+      announce('Job done. Leave it smoking on the Strand.');
     }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
+    if (world.state.timer === 0 && screen === SCREEN_PLAY) endGame();
   }
 
   function frame(now) {
@@ -115,10 +128,10 @@ function runGame() {
     } else {
       accumulator = 0;
     }
-    renderer.draw(world.state, screen, best);
+    renderer.draw(world.state, screen, best, seed);
   }
 
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
+  // Leaving the tab pauses a running game rather than letting the timer run unseen.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
@@ -126,7 +139,7 @@ function runGame() {
     }
   });
 
-  announce('Block Dodger. Press Space or click to start.');
+  announce('Tarnwick. Press Space or click to start.');
   requestAnimationFrame(frame);
 }
 

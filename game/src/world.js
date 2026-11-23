@@ -1,120 +1,111 @@
-// The game's rules and state, with no drawing and no browser in it: the player's paddle, the
-// pool of falling blocks and coins, spawning, collisions, score, lives and level. step() advances
-// one fixed step and returns what happened as bit flags, so the caller can react without the
-// world knowing about screens or sound. Nothing here allocates after createWorld returns.
-import { BLOCK, COIN, FIELD, LEVEL, LIVES, PLAYER, POOL_SIZE } from './config.js';
+// The game's rules and state, with no drawing and no browser in it: the player's Falcon
+// GT, the traffic ahead, the police chase, the helicopter, the mission clock and the
+// money. step() advances one fixed step and returns what happened as bit flags, so the
+// caller can react without the world knowing about screens or sound. Nothing here
+// allocates after createWorld returns.
 
-export const KIND_BLOCK = 0;
-export const KIND_COIN = 1;
+import { FIELD, STEP, PLAYER, MISSIONS } from './config.js';
+import { createRandom } from './random.js';
+import { VEHICLES } from './vehicles.js';
 
-export const EVENT_HIT = 1;
-export const EVENT_COIN = 2;
-export const EVENT_OVER = 4;
+export const EVENT_BOUNTY = 1;
+export const EVENT_BUSTED = 2;
+export const EVENT_JOB_DONE = 4;
 
-function overlaps(a, b) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+const TRAFFIC_MODELS = [VEHICLES.coupe, VEHICLES.pickup, VEHICLES.taxi, VEHICLES.sedan];
+
+/** A traffic car: its model, its lane (-1..1) and its depth (0 = near, 1 = horizon). */
+function makeTraffic(random, depth) {
+  return {
+    model: TRAFFIC_MODELS[Math.floor(random.next() * TRAFFIC_MODELS.length)],
+    lateral: random.range(-0.38, 0.38),
+    depth,
+    police: false,
+    speed: random.range(0.5, 0.9),
+  };
 }
 
 export function createWorld(random) {
-  const player = { x: 0, y: FIELD.groundY - PLAYER.height, width: PLAYER.width, height: PLAYER.height, invulnerable: 0 };
-  const items = [];
-  for (let index = 0; index < POOL_SIZE; index += 1) {
-    items.push({ active: false, kind: KIND_BLOCK, x: 0, y: 0, width: 0, height: 0, speed: 0 });
-  }
-  const state = { player, items, score: 0, lives: LIVES, level: 1, elapsed: 0, blockTimer: 0, coinTimer: 0 };
+  const state = {
+    // The player: the Falcon GT, its speed and its position on the road.
+    speed: 0,
+    maxSpeed: PLAYER.maxSpeed,
+    lateral: 0.08,
+    damage: 0.22,
+    money: 24600,
+    wanted: 4,
+    // The mission clock (job 6) and the day.
+    timer: 107,
+    day: 6,
+    mission: MISSIONS[5],
+    // The chase: two cruisers flanking, the helicopter overhead.
+    helicopter: { x: 0.52, y: 0.16, span: 0.20 },
+    cruisers: [
+      { lateral: -0.30, depth: 0.62 },
+      { lateral: 0.38, depth: 0.68 },
+    ],
+    traffic: [],
+    pedestrians: [],
+    elapsed: 0,
+    onFoot: false,
+    jobDone: false,
+  };
 
   function reset() {
-    player.x = (FIELD.width - player.width) / 2;
-    player.invulnerable = 0;
-    for (const item of items) item.active = false;
-    state.score = 0;
-    state.lives = LIVES;
-    state.level = 1;
+    state.speed = 0;
+    state.lateral = 0.08;
+    state.damage = 0.22;
+    state.money = 24600;
+    state.wanted = 4;
+    state.timer = 107;
+    state.day = 6;
+    state.mission = MISSIONS[5];
     state.elapsed = 0;
-    state.blockTimer = BLOCK.interval;
-    state.coinTimer = COIN.interval;
-  }
-
-  function freeItem() {
-    for (let index = 0; index < items.length; index += 1) if (!items[index].active) return items[index];
-    return null;
-  }
-
-  function spawnBlock() {
-    const item = freeItem();
-    if (item === null) return;
-    item.active = true;
-    item.kind = KIND_BLOCK;
-    item.width = BLOCK.minWidth + random() * (BLOCK.maxWidth - BLOCK.minWidth);
-    item.height = BLOCK.height;
-    item.x = random() * (FIELD.width - item.width);
-    item.y = -item.height;
-    item.speed = BLOCK.speed + BLOCK.speedPerLevel * (state.level - 1) + random() * BLOCK.speedJitter;
-  }
-
-  function spawnCoin() {
-    const item = freeItem();
-    if (item === null) return;
-    item.active = true;
-    item.kind = KIND_COIN;
-    item.width = COIN.size;
-    item.height = COIN.size;
-    item.x = random() * (FIELD.width - item.width);
-    item.y = -item.height;
-    item.speed = COIN.speed + COIN.speedPerLevel * (state.level - 1);
-  }
-
-  function blockInterval() {
-    return Math.max(BLOCK.minInterval, BLOCK.interval * BLOCK.intervalScale ** (state.level - 1));
+    state.onFoot = false;
+    state.jobDone = false;
+    state.traffic = [];
+    for (let i = 0; i < 5; i += 1) {
+      state.traffic.push(makeTraffic(random, 0.5 + i * 0.09));
+    }
+    state.cruisers = [
+      { lateral: -0.30, depth: 0.62 },
+      { lateral: 0.38, depth: 0.68 },
+    ];
   }
 
   /**
-   * One fixed step. `direction` is -1, 0 or 1 (left, still, right). With `harmless` set (the title
-   * screen's backdrop) things fall but nothing touches the player and nothing scores.
+   * One fixed step. `direction` is -1, 0 or 1 (left, still, right); `throttle` is 0..1.
+   * The road scrolls: traffic drifts toward the camera, the timer ticks down, and the
+   * helicopter holds its station over the road ahead.
    */
-  function step(dt, direction, harmless) {
+  function step(dt, direction, throttle) {
     let events = 0;
     state.elapsed += dt;
-    state.level = Math.min(LEVEL.max, 1 + Math.floor(state.elapsed / LEVEL.seconds));
-
-    player.x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * dt));
-    if (player.invulnerable > 0) player.invulnerable = Math.max(0, player.invulnerable - dt);
-
-    state.blockTimer -= dt;
-    if (state.blockTimer <= 0) {
-      spawnBlock();
-      state.blockTimer += blockInterval();
-    }
-    state.coinTimer -= dt;
-    if (state.coinTimer <= 0) {
-      spawnCoin();
-      state.coinTimer += COIN.interval + random() * COIN.intervalJitter;
-    }
-
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (!item.active) continue;
-      item.y += item.speed * dt;
-      if (item.y > FIELD.groundY) {
-        item.active = false;
-        if (item.kind === KIND_BLOCK && !harmless) state.score += BLOCK.dodgePoints;
-        continue;
+    state.timer = Math.max(0, state.timer - dt);
+    // Steering and speed.
+    state.lateral = Math.max(-0.42, Math.min(0.42, state.lateral + direction * 0.55 * dt));
+    const target = state.maxSpeed * throttle;
+    if (target > state.speed) state.speed = Math.min(target, state.speed + PLAYER.accel * dt);
+    else state.speed = Math.max(target, state.speed - PLAYER.brake * dt);
+    // Traffic drifts toward the camera as the player advances.
+    const flow = (state.speed / state.maxSpeed) * 0.12 * dt;
+    for (const car of state.traffic) {
+      car.depth -= flow * car.speed;
+      if (car.depth < 0.05) {
+        car.depth = 0.92;
+        car.lateral = random.range(-0.38, 0.38);
+        car.model = TRAFFIC_MODELS[Math.floor(random.next() * TRAFFIC_MODELS.length)];
       }
-      if (harmless || !overlaps(item, player)) continue;
-      if (item.kind === KIND_COIN) {
-        item.active = false;
-        state.score += COIN.points;
-        events |= EVENT_COIN;
-      } else if (player.invulnerable === 0) {
-        item.active = false;
-        state.lives -= 1;
-        player.invulnerable = PLAYER.invulnerable;
-        events |= EVENT_HIT;
-        if (state.lives === 0) {
-          events |= EVENT_OVER;
-          break;
-        }
-      }
+    }
+    // Cruisers weave a little.
+    state.cruisers[0].lateral = -0.30 + Math.sin(state.elapsed * 0.7) * 0.05;
+    state.cruisers[1].lateral = 0.38 + Math.cos(state.elapsed * 0.55) * 0.05;
+    // The helicopter bobs gently and holds over the road.
+    state.helicopter.y = 0.16 + Math.sin(state.elapsed * 0.9) * 0.008;
+    // The timer running out ends the job.
+    if (state.timer === 0 && !state.jobDone) {
+      state.jobDone = true;
+      events |= EVENT_JOB_DONE;
     }
     return events;
   }
