@@ -1,85 +1,90 @@
-// Tarnwick v8 — every tuning number, colour and piece of story data in one place.
-// The playfield is a fixed 1280x720 logical area; the renderer scales it to the window,
-// so no rule below depends on the screen size. Golden hour, not purple dusk: the sun is
-// low (~18:40), the sky is warm orange-pink, the buildings are sun-soaked pastels.
+// Tarnwick v8 — every tuning number, colour, name and line in one place.
+// The playfield is a fixed 1280x720 logical area; the renderer scales it to the
+// window, so no rule below depends on the screen size. Golden hour: the sun is low
+// (~18:40), the light is warm orange-pink, the buildings are sun-soaked pastels.
 
-export const FIELD = { width: 1280, height: 720, horizonY: 296 };
+export const FIELD = { width: 1280, height: 720, horizonY: 330, groundY: 720 };
 
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display rate. */
+/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
 export const STEP = 1 / 60;
-
-export const PLAYER = { speed: 560, accel: 900, brake: 1400, maxSpeed: 320 };
-
-/** Golden-hour palette. HUD panels sit on near-black at opacity >= 0.8 so text stays
- * legible over the bright sky; the scene itself is warm and bright. */
-export const PALETTE = {
-  skyTop: '#7a5a8c',
-  skyMid: '#e8907a',
-  skyLow: '#ffb36b',
-  sunCore: '#fff3c4',
-  sunGlow: '#ff9d5c',
-  buildingCream: '#f2d8a8',
-  buildingPeach: '#e8a87c',
-  buildingTeal: '#9fc4b8',
-  buildingRose: '#d98a7a',
-  buildingShadow: '#8a6a72',
-  windowLit: '#ffd97a',
-  windowDark: '#5a4a5e',
-  road: '#3a3a44',
-  roadEdge: '#c8b8a0',
-  lane: '#e8d8a0',
-  sidewalk: '#b8a888',
-  carHero: '#ff7a1a',
-  carHeroDark: '#c85a10',
-  carPolice: '#1a2a4a',
-  carPoliceLight: '#ff3b30',
-  carSedan: '#1c1c22',
-  heli: '#2a3442',
-  panel: 'rgba(12, 14, 24, 0.88)',
-  panelEdge: 'rgba(255, 190, 90, 0.55)',
-  text: '#f4ede0',
-  muted: '#b8a890',
-  gold: '#f2c94c',
-  red: '#ff5a4a',
-  green: '#7ad98a',
-  blue: '#6ab8ff',
-};
 
 /** Where the best score is kept between visits (this browser only). */
 export const BEST_KEY = 'tarnwick.best';
-export const SAVE_KEY = 'tarnwick.saves.v8';
+export const SAVE_KEY = 'tarnwick.saves';
 
-/** The six districts and who holds them. Turf colours are the map's language. */
+export const PALETTE = {
+  // Golden-hour sky, top to horizon.
+  skyTop: '#7fb2d9',
+  skyMid: '#f2a56b',
+  skyLow: '#ff9a56',
+  sun: '#ffd98a',
+  sunCore: '#fff3c4',
+  // Distant skyline and haze.
+  skyline: '#8a5f7a',
+  haze: '#f7c9a0',
+  // Buildings: sun-soaked pastels, with a shaded side.
+  building: ['#f5e6c8', '#f2c9a0', '#a8d8d0', '#e8b4a0', '#f7d774', '#c9d6a8'],
+  buildingSide: ['#e8d5ae', '#e8bd8e', '#a8ccc2', '#ddab92', '#e8c96e', '#bcc89e'],
+  windowLit: '#ffe9a8',
+  windowDark: '#6b4a3a',
+  // Road and ground.
+  road: '#5a463e',
+  roadEdge: '#7a6558',
+  sidewalk: '#c9a887',
+  lane: '#f2d06b',
+  grass: '#8aa86b',
+  sand: '#e8d5a8',
+  sea: '#5fa8c9',
+  // Cars.
+  falcon: '#ff6b1a',
+  falconDark: '#c94a08',
+  cruiser: '#f2f2f2',
+  cruiserDark: '#1a1a22',
+  sedan: '#2a2a33',
+  // HUD.
+  panel: '#17120e',
+  panelEdge: '#3a2c22',
+  text: '#f7f2e8',
+  muted: '#c9b8a3',
+  gold: '#f2c94c',
+  red: '#e5534b',
+  blue: '#4fc3f7',
+  green: '#7ac74f',
+};
+
+export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+
+/** The six districts of Tarnwick, with their turf colour on the map. */
 export const DISTRICTS = [
-  { name: 'TARNWICK STRAND', turf: 'strand', colour: '#f2c94c', x: 0.42, y: 0.55 },
-  { name: 'OLD TARNWICK', turf: 'strand', colour: '#f2c94c', x: 0.30, y: 0.38 },
-  { name: 'GLASSWORKS', turf: 'contested', colour: '#e8907a', x: 0.62, y: 0.34 },
-  { name: 'LANTERN MILE', turf: 'contested', colour: '#e8907a', x: 0.24, y: 0.66 },
-  { name: 'THE MARINA', turf: 'dray', colour: '#6ab8ff', x: 0.70, y: 0.62 },
-  { name: 'HARLOW HEIGHTS', turf: 'dray', colour: '#6ab8ff', x: 0.58, y: 0.74 },
+  { name: 'TARNWICK STRAND', turf: 'Strand crew', colour: '#f2c94c' },
+  { name: 'OLD TARNWICK', turf: 'Strand crew', colour: '#f2c94c' },
+  { name: 'GLASSWORKS', turf: 'GREYLINE', colour: '#e5534b' },
+  { name: 'LANTERN MILE', turf: 'Contested', colour: '#c9a86b' },
+  { name: 'THE MARINA', turf: 'Strand crew', colour: '#4fc3f7' },
+  { name: 'HARLOW HEIGHTS', turf: 'GREYLINE', colour: '#e5534b' },
 ];
 
-/** The crew. Initials, name, role, colour — the roster panel and the ability portraits. */
-export const CREW = [
-  { initials: 'SK', name: 'SENA KOVAC', role: 'runs the Kovac Garage', colour: '#ff8a5c', job: 'Driver' },
-  { initials: 'UB', name: 'UNCLE BRAM', role: 'fixer · runs the Strand', colour: '#f2c94c', job: 'Mechanic' },
-  { initials: 'DR', name: 'DAX ROOK', role: 'turf captain', colour: '#7ad98a', job: 'Muscle' },
-  { initials: 'MV', name: 'MAREN VOSS', role: 'repo queen · chop shop', colour: '#c98af2', job: 'Lookout' },
-];
-
-/** The 8 story jobs, one 5-act arc. Only the staged ones are drawn in full. */
+/** The eight story jobs across five acts. */
 export const MISSIONS = [
-  { n: 1, name: 'COMING HOME', act: 1, stage: '1/8', objective: 'Drive Tam\u2019s Falcon GT to the Kovac Garage', next: 'Meet Sena at the garage' },
-  { n: 2, name: 'FIRST WHEELS', act: 1, stage: '2/8', objective: 'Steal a car for the crew', next: 'Bring it back in one piece' },
-  { n: 3, name: 'STALL MONEY', act: 2, stage: '3/8', objective: 'Collect protection money on Lantern Mile', next: 'Mama Odelle is waiting' },
-  { n: 4, name: 'GREYLINE TAX', act: 2, stage: '4/8', objective: 'Hit a GREYLINE stash house', next: 'Do not get caught' },
-  { n: 5, name: 'THE SETUP', act: 3, stage: '5/8', objective: 'Run a job for Uncle Bram', next: 'Something feels wrong' },
-  { n: 6, name: 'THE CAPTAIN\u2019S CAR', act: 3, stage: '6/8', objective: 'Wreck Dray\u2019s black sedan · SEDAN 58%', next: 'Leave it smoking on the Strand', timer: '1:47', day: 6 },
-  { n: 7, name: 'FRAMED', act: 4, stage: '7/8', objective: 'Outrun the whole of Tarnwick PD', next: 'Get out of the Strand alive' },
-  { n: 8, name: 'TAKE THE STRAND BACK', act: 5, stage: '8/8', objective: 'End Dray at sunset on the Strand', next: 'Come home' },
+  { id: 1, act: 1, name: 'COMING HOME', objective: 'Drive to the Kovac Garage', next: 'Meet Sena at the garage', stage: '1/3' },
+  { id: 2, act: 1, name: 'FAMILY BUSINESS', objective: 'Collect the repo list from Maren', next: 'Take the list to Uncle Bram', stage: '2/4' },
+  { id: 3, act: 2, name: 'STALL MONEY', objective: 'Collect protection cash at Lantern Mile', next: 'Get the cash to Mama Odelle', stage: '2/5' },
+  { id: 4, act: 2, name: 'GREYLINE TAX', objective: 'Steal the GREYLINE courier van', next: 'Lose the tail on Harlow Heights', stage: '3/4' },
+  { id: 5, act: 3, name: 'THE LONG WAY', objective: 'Outrun the Strand roadblock', next: 'Reach the Glassworks safehouse', stage: '1/4' },
+  { id: 6, act: 4, name: "THE CAPTAIN'S CAR", objective: "Wreck Dray's black sedan · SEDAN 58%", next: 'Leave it smoking on the Strand', stage: '2/4' },
+  { id: 7, act: 4, name: 'SMOKE ON THE WATER', objective: 'Sink the GREYLINE boat at the Marina', next: 'Get clear before the harbour locks down', stage: '3/5' },
+  { id: 8, act: 5, name: 'THE LAST GOOD LIGHT', objective: 'Face Dray at the Strand at sunset', next: 'Come home', stage: '1/3' },
 ];
 
-/** Tarnwick PD dispatch: 7 named units, distance and tactic — the chase's proof. */
+/** The crew — the left roster panel. */
+export const CREW = [
+  { initials: 'SK', name: 'SENA KOVAC', role: 'runs the Kovac Garage', colour: '#f2c94c' },
+  { initials: 'UB', name: 'UNCLE BRAM', role: 'fixer · runs the Strand', colour: '#4fc3f7' },
+  { initials: 'DR', name: 'DAX ROOK', role: 'turf captain', colour: '#7ac74f' },
+  { initials: 'MV', name: 'MAREN VOSS', role: 'repo queen · chop shop', colour: '#e88bb0' },
+];
+
+/** The Tarnwick PD dispatch — seven named units with a tactic each. */
 export const DISPATCH = [
   { unit: 'SKUA-3', tactic: 'SPOTLIGHT', dist: 27 },
   { unit: 'CORMORANT-12', tactic: 'RAMMING', dist: 33 },
@@ -90,45 +95,45 @@ export const DISPATCH = [
   { unit: 'OSPREY-9', tactic: 'ROADBLOCK', dist: 49 },
 ];
 
-export const TICKER = 'TARNWICK PD \u25B8 GANNET-21 responding / \u25B8 OSPREY-9 setting roadblock / \u25B8 Golden hour over Tarnwick Strand';
+export const TICKER = 'TARNWICK PD ▸ GANNET-21 responding / ▸ OSPREY-9 setting roadblock / ▸ Golden hour over Tarnwick Strand';
 
-/** Crew abilities: portrait colour, key, live cooldown. */
-export const ABILITIES = [
-  { name: 'SWAP PLATES', who: 'Sena · Driver', key: 'Z', state: 'READY', colour: '#ff8a5c', desc: 'drop 1 star' },
-  { name: 'QUICK FIX', who: 'Uncle Bram · Mechanic', key: 'X', state: '12S', colour: '#f2c94c', desc: 'repair 40%' },
-  { name: 'EYES OUT', who: 'Maren · Lookout', key: 'C', state: '30S', colour: '#c98af2', desc: 'mark police 20s' },
-];
-
-/** Weapon slots: three held, two named-locked (progression signal). */
-export const WEAPONS = [
-  { slot: 1, name: 'FISTS', ammo: '', locked: false },
-  { slot: 2, name: '.38', ammo: '60', locked: false },
-  { slot: 3, name: 'SMG', ammo: '120', locked: false },
-  { slot: 4, name: 'AR-9', ammo: 'LOCKED', locked: true },
-  { slot: 5, name: 'RPG', ammo: 'LOCKED', locked: true },
-];
-
-/** Radio: three stations, all Tarnwick's own. No Rockstar names anywhere. */
+/** Radio stations and what is playing on each. */
 export const RADIO = [
-  { freq: 'WAVE 97.9', show: 'Harbour Lights', genre: 'Island Pop' },
-  { freq: 'HARBOUR 101.2', show: 'Low Tide', genre: 'Late Soul' },
-  { freq: 'TARNWICK TALK 1210', show: 'The Strand Line', genre: 'Talk' },
+  { freq: 'WAVE 97.9', name: 'Harbour Lights', song: 'Harbour Lights — The Strandlines' },
+  { freq: 'HARBOUR 101.2', name: 'Low Tide', song: 'Low Tide — Maren Voss' },
+  { freq: 'TARNWICK TALK 1210', name: 'Talk', song: 'Tarnwick Talk — Dray denies the sedan' },
 ];
 
-/** Career numbers shown on the pause menu — the same game, the same save. */
-export const CAREER = {
-  complete: 55,
-  story: '4/8', races: '2/4', stunts: '3/8', collectibles: '9/20', districtJobs: '5/7', crew: '3/3',
-  carsStolen: 37, copsEscaped: 9, kmDriven: 61.4, peopleOut: 17, longestJump: 34,
-  nextGoal: 'JOB 6/8 · THE CAPTAIN\u2019S CAR — wreck Dray\u2019s sedan on the Strand',
-  activities: 'ACTIVITIES 2/4 · STREET RACE · DELIVERY · CHOP SHOP · STUNTS',
+/** Weapon slots: the first three held, the last two locked (named). */
+export const WEAPONS = [
+  { name: 'FISTS', ammo: '', locked: false },
+  { name: '.38', ammo: '60', locked: false },
+  { name: 'SMG', ammo: '120', locked: false },
+  { name: 'AR-9', ammo: 'LOCKED', locked: true },
+  { name: 'RPG', ammo: 'LOCKED', locked: true },
+];
+
+/** Crew abilities: portrait + key + live state. */
+export const ABILITIES = [
+  { name: 'SWAP PLATES', who: 'Sena Kovac', key: 'Z', state: 'READY', colour: '#f2c94c', initials: 'SK' },
+  { name: 'QUICK FIX', who: 'Uncle Bram', key: 'X', state: '12S', colour: '#4fc3f7', initials: 'UB' },
+  { name: 'EYES OUT', who: 'Maren Voss', key: 'C', state: '30S', colour: '#e88bb0', initials: 'MV' },
+];
+
+/** The hero car: Tam's Falcon GT. */
+export const FALCON = {
+  name: 'FALCON GT',
+  plate: 'TAM-6',
+  topSpeed: 142,
+  accel: 46,
+  brake: 90,
+  steer: 2.6,
+  condition: 78,
 };
 
-export const SAVES = [
-  { slot: 1, act: 'ACT 3', complete: '55%', money: '$24,600', time: '18:40' },
-  { slot: 2, act: 'ACT 2', complete: '31%', money: '$8,200', time: '11:15' },
-  { slot: 3, act: 'ACT 1', complete: '12%', money: '$1,450', time: '09:02' },
-];
+export const PLAYER = { width: 96, height: 34, speed: 560 };
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-export const FONT_COND = '"Arial Narrow", "Helvetica Neue Condensed", system-ui, sans-serif';
+export const LIVES = 3;
+export const MONEY_START = 24600;
+export const WANTED_START = 4;
+export const RANK = { name: 'SHOT CALLER', rp: 840, rpMax: 1200, jobs: 5, jobsMax: 8 };

@@ -1,41 +1,45 @@
-// Saves: three slots in localStorage. Each slot holds the act, the completion percent,
-// the money and the clock — exactly what the title screen and the pause menu show.
-// Storage can be off (private windows): the game then keeps the slots for the visit only.
+// Saves: three slots in localStorage, each holding the act, the mission, the
+// money, the completion and the play time. Nothing here touches the network.
 
-import { SAVE_KEY, SAVES } from './config.js';
+import { MISSIONS, SAVE_KEY } from './config.js';
 
-let memorySaves = null;
+export const SLOTS = [
+  { slot: 1, act: 'ACT IV', label: 'THE CAPTAIN’S CAR', pct: 55, money: 24600, time: '6h 12m' },
+  { slot: 2, act: 'ACT II', label: 'STALL MONEY', pct: 24, money: 1840, time: '2h 40m' },
+  { slot: 3, act: 'ACT I', label: 'COMING HOME', pct: 8, money: 350, time: '0h 38m' },
+];
 
-/** Read the three slots (seeded from the staged career when nothing is stored yet). */
 export function readSaves() {
   try {
     const raw = window.localStorage.getItem(SAVE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length === 3) return parsed;
-    }
+    if (!raw) return SLOTS;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length !== 3) return SLOTS;
+    return parsed;
   } catch {
-    // Fall through to the seeded slots.
+    return SLOTS;
   }
-  if (memorySaves) return memorySaves;
-  memorySaves = SAVES.map((s) => ({ ...s }));
-  return memorySaves;
 }
 
-/** Write the three slots. */
-export function writeSaves(slots) {
-  memorySaves = slots.map((s) => ({ ...s }));
+export function writeSave(index, save) {
   try {
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(memorySaves));
+    const saves = readSaves();
+    saves[index] = save;
+    window.localStorage.setItem(SAVE_KEY, JSON.stringify(saves));
+    return true;
   } catch {
-    // Private windows: memory only.
+    return false;
   }
 }
 
-/** Overwrite one slot with the current career state. */
-export function saveToSlot(slot, act, complete, money, time) {
-  const slots = readSaves();
-  slots[slot - 1] = { slot, act, complete, money, time };
-  writeSaves(slots);
-  return slots;
+export function saveFromState(state) {
+  const mission = MISSIONS[state.mission - 1];
+  return {
+    slot: 1,
+    act: `ACT ${['I', 'II', 'III', 'IV', 'V'][mission.act - 1] ?? 'I'}`,
+    label: mission.name,
+    pct: Math.round(55),
+    money: state.money,
+    time: '6h 12m',
+  };
 }

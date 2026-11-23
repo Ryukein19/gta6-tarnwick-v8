@@ -1,153 +1,148 @@
-// The city of Tarnwick: a golden-hour sky with a low sun, sun-soaked pastel buildings
-// lining both sides of the Strand boulevard, and the road itself receding to the horizon.
-// Every building is drawn from a seeded layout, so the same seed always paints the same
-// street — the cover and the title panorama share this sky.
+// The city: seeded pastel buildings lining both sides of the Strand, a distant
+// skyline on the horizon, palms and lamps. Buildings are generated once per seed;
+// each one knows its side, its depth, its height and its colour, and the renderer
+// draws it with a sunlit face and a shaded side so the street reads as 3D.
 
-import { FIELD, PALETTE, DISTRICTS } from './config.js';
-import { CAMERA, depthScale, depthY, depthX } from './geom.js';
+import { FIELD, PALETTE } from './config.js';
+import { project, roadHalfWidth } from './geom.js';
+import { pick } from './random.js';
 
-/** Golden-hour sky: warm orange-pink at the horizon, soft violet up top, sun disc low. */
-export function drawSky(ctx, sunX, sunY) {
-  const g = ctx.createLinearGradient(0, 0, 0, FIELD.horizonY + 40);
-  g.addColorStop(0, PALETTE.skyTop);
-  g.addColorStop(0.55, PALETTE.skyMid);
-  g.addColorStop(1, PALETTE.skyLow);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, FIELD.width, FIELD.horizonY + 40);
-
-  // Sun glow, then the disc itself, low on the horizon.
-  const glow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 190);
-  glow.addColorStop(0, 'rgba(255, 243, 196, 0.95)');
-  glow.addColorStop(0.35, 'rgba(255, 157, 92, 0.55)');
-  glow.addColorStop(1, 'rgba(255, 157, 92, 0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(sunX - 200, sunY - 200, 400, 400);
-  ctx.fillStyle = PALETTE.sunCore;
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, 34, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Thin warm clouds catching the light.
-  ctx.fillStyle = 'rgba(255, 220, 180, 0.35)';
-  for (const [cx, cy, w] of [[180, 90, 220], [560, 60, 160], [980, 120, 240], [1120, 70, 130]]) {
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, w / 2, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
+/** Build the street: 14 buildings a side, spaced down the road, plus palms and lamps. */
+export function createCity(random) {
+  const buildings = [];
+  for (let side = -1; side <= 1; side += 2) {
+    let z = 0.06;
+    let index = 0;
+    while (z < 0.97) {
+      const depth = 0.05 + random() * 0.06;
+      buildings.push({
+        side,
+        z,
+        depth,
+        width: 0.16 + random() * 0.14,
+        height: 90 + random() * 170,
+        colour: pick(random, PALETTE.building),
+        sideColour: pick(random, PALETTE.buildingSide),
+        windows: 2 + Math.floor(random() * 4),
+        awning: random() < 0.3,
+        index: index++,
+      });
+      z += depth + 0.012;
+    }
   }
+  const palms = [];
+  for (let i = 0; i < 16; i += 1) {
+    palms.push({ side: i % 2 === 0 ? -1 : 1, z: 0.08 + random() * 0.8, lean: (random() - 0.5) * 0.5 });
+  }
+  const lamps = [];
+  for (let i = 0; i < 10; i += 1) {
+    lamps.push({ side: i % 2 === 0 ? -1 : 1, z: 0.1 + random() * 0.75 });
+  }
+  return { buildings, palms, lamps };
 }
 
-/**
- * One building face: a pastel box with lit windows and a darker shaded side, drawn at a
- * depth so the street narrows toward the vanishing point. `side` is -1 (left) or 1 (right).
- */
-export function drawBuilding(ctx, random, side, depth, baseY) {
-  const s = depthScale(depth);
-  const w = 150 * s + 40;
-  const h = (150 + random.range(0, 110)) * s + 30;
-  const x = depthX(side * (0.52 + random.range(0, 0.10)), depth) - (side < 0 ? w : 0);
-  const y = baseY - h;
-  const colours = [PALETTE.buildingCream, PALETTE.buildingPeach, PALETTE.buildingTeal, PALETTE.buildingRose];
-  const face = colours[Math.floor(random.next() * colours.length)];
-  // Front face (sunlit) and shaded side face.
-  ctx.fillStyle = face;
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = PALETTE.buildingShadow;
-  ctx.fillRect(x + (side < 0 ? w - 12 * s : 0), y, 12 * s, h);
-  // Lit windows: warm yellow, some dark.
-  const cols = Math.max(2, Math.floor(w / 26));
-  const rows = Math.max(2, Math.floor(h / 34));
+/** Draw one building: sunlit front, shaded side, lit windows, an awning sometimes. */
+export function drawBuilding(ctx, b, time) {
+  const base = project(b.side * 1.18, b.z);
+  const far = project(b.side * 1.18, Math.min(0.99, b.z + b.depth));
+  const w = b.width * FIELD.width * 0.62 * base.s;
+  const h = b.height * base.s;
+  if (w < 4 || h < 6) return;
+  const x = base.x - (b.side < 0 ? w : 0);
+  // Shaded side face (the face turned away from the low sun).
+  const sideW = Math.max(6, w * 0.22);
+  ctx.fillStyle = b.sideColour;
+  if (b.side < 0) ctx.fillRect(x + w, base.y - h, sideW, h);
+  else ctx.fillRect(x - sideW, base.y - h, sideW, h);
+  // Sunlit front.
+  ctx.fillStyle = b.colour;
+  ctx.fillRect(x, base.y - h, w, h);
+  // Roof line in the warm light.
+  ctx.fillStyle = PALETTE.sun;
+  ctx.fillRect(x, base.y - h, w, Math.max(2, 4 * base.s));
+  // Lit windows: warm gold, some dark.
+  const cols = Math.max(1, Math.floor(w / 26));
+  const rows = Math.max(1, Math.floor(h / 34));
   for (let r = 0; r < rows; r += 1) {
     for (let c = 0; c < cols; c += 1) {
-      ctx.fillStyle = random.next() < 0.55 ? PALETTE.windowLit : PALETTE.windowDark;
-      ctx.fillRect(x + 8 + c * ((w - 16) / cols), y + 10 + r * ((h - 18) / rows), (w - 16) / cols - 6, (h - 18) / rows - 8);
+      const lit = ((b.index * 7 + r * 3 + c * 5) % 4) !== 0;
+      ctx.fillStyle = lit ? PALETTE.windowLit : PALETTE.windowDark;
+      const wx = x + 8 + (c * (w - 16)) / Math.max(1, cols);
+      const wy = base.y - h + 12 + (r * (h - 22)) / Math.max(1, rows);
+      ctx.fillRect(wx, wy, Math.max(3, (w - 16) / Math.max(1, cols) - 8), Math.max(4, 12 * base.s));
     }
   }
-  // Roof line catching the sun.
-  ctx.fillStyle = 'rgba(255, 240, 200, 0.8)';
-  ctx.fillRect(x, y, w, 3);
-  // Long shadow toward the camera.
-  ctx.fillStyle = 'rgba(40, 20, 20, 0.25)';
-  const shW = w * 0.9;
-  ctx.beginPath();
-  ctx.moveTo(x + (side < 0 ? w * 0.1 : w * 0.9), baseY);
-  ctx.lineTo(x + (side < 0 ? w * 0.1 : w * 0.9) + (side < 0 ? -shW : shW) * 0.4, baseY + 60 * s + 20);
-  ctx.lineTo(x + (side < 0 ? w * 0.1 : w * 0.9) + (side < 0 ? -shW : shW) * 0.4 + shW, baseY + 60 * s + 20);
-  ctx.lineTo(x + (side < 0 ? w * 0.1 : w * 0.9) + shW, baseY);
-  ctx.closePath();
-  ctx.fill();
+  // A lit shop awning at street level, sometimes.
+  if (b.awning && base.s > 0.25) {
+    ctx.fillStyle = '#e5534b';
+    ctx.fillRect(x, base.y - 16 * base.s - 8, w, 10 * base.s + 4);
+    ctx.fillStyle = PALETTE.windowLit;
+    ctx.fillRect(x, base.y - 8 * base.s, w, 8 * base.s);
+  }
+  void far;
+  void time;
 }
 
-/** Both sides of the street, near to far. */
-export function drawStreet(ctx, random) {
-  const depths = [0.05, 0.22, 0.42, 0.62, 0.80, 0.92];
-  for (const d of depths) {
-    const y = depthY(d) + 8;
-    drawBuilding(ctx, random, -1, d, y);
-    drawBuilding(ctx, random, 1, d, y);
-  }
-}
-
-/** The boulevard itself: a trapezoid from the horizon to the bottom of the frame, with
- * lane markings, a centre line and a crosswalk near the camera. */
-export function drawRoad(ctx) {
-  const topW = 46;
-  const botW = 1080;
-  const topY = FIELD.horizonY + 6;
-  const botY = FIELD.height;
-  const cx = CAMERA.vx;
-  ctx.fillStyle = PALETTE.road;
+/** A palm: a leaning trunk and a crown of fronds, silhouetted against the sun. */
+export function drawPalm(ctx, p) {
+  const base = project(p.side * 1.12, p.z);
+  const h = 120 * base.s;
+  if (h < 8) return;
+  ctx.strokeStyle = '#6b4a2f';
+  ctx.lineWidth = Math.max(2, 7 * base.s);
   ctx.beginPath();
-  ctx.moveTo(cx - topW / 2, topY);
-  ctx.lineTo(cx + topW / 2, topY);
-  ctx.lineTo(cx + botW / 2, botY);
-  ctx.lineTo(cx - botW / 2, botY);
-  ctx.closePath();
-  ctx.fill();
-  // Sidewalks.
-  ctx.fillStyle = PALETTE.sidewalk;
-  ctx.beginPath();
-  ctx.moveTo(cx - topW / 2 - 90, topY);
-  ctx.lineTo(cx - topW / 2, topY);
-  ctx.lineTo(cx - botW / 2, botY);
-  ctx.lineTo(cx - botW / 2 - 150, botY);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(cx + topW / 2 + 90, topY);
-  ctx.lineTo(cx + topW / 2, topY);
-  ctx.lineTo(cx + botW / 2, botY);
-  ctx.lineTo(cx + botW / 2 + 150, botY);
-  ctx.closePath();
-  ctx.fill();
-  // Lane dashes, shrinking toward the horizon.
-  ctx.fillStyle = PALETTE.lane;
-  for (let i = 0; i < 7; i += 1) {
-    const t = i / 7;
-    const y = topY + t * (botY - topY);
-    const w = 4 + t * 10;
-    const h = 6 + t * 26;
-    ctx.fillRect(cx - w / 2, y, w, h);
-  }
-  // Crosswalk stripes near the camera.
-  ctx.fillStyle = 'rgba(240, 230, 210, 0.85)';
-  for (let i = 0; i < 8; i += 1) {
-    const x = cx - botW / 2 + 60 + i * ((botW - 120) / 8);
-    ctx.fillRect(x, botY - 84, (botW - 120) / 8 - 14, 26);
+  ctx.moveTo(base.x, base.y);
+  ctx.quadraticCurveTo(base.x + p.lean * 40 * base.s, base.y - h * 0.6, base.x + p.lean * 70 * base.s, base.y - h);
+  ctx.stroke();
+  ctx.strokeStyle = '#4a7a3a';
+  ctx.lineWidth = Math.max(1.5, 4 * base.s);
+  const tx = base.x + p.lean * 70 * base.s;
+  const ty = base.y - h;
+  for (let f = -2; f <= 2; f += 1) {
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.quadraticCurveTo(tx + f * 22 * base.s, ty - 14 * base.s, tx + f * 34 * base.s, ty + 10 * base.s);
+    ctx.stroke();
   }
 }
 
-/** The six districts as a lookup for the map and the HUD location line. */
-export function districtAt(x, y) {
-  let best = DISTRICTS[0];
-  let bestD = Infinity;
-  for (const d of DISTRICTS) {
-    const dx = d.x - x;
-    const dy = d.y - y;
-    const dist = dx * dx + dy * dy;
-    if (dist < bestD) {
-      bestD = dist;
-      best = d;
-    }
+/** A street lamp, already lit for golden hour. */
+export function drawLamp(ctx, l) {
+  const base = project(l.side * 1.08, l.z);
+  const h = 64 * base.s;
+  if (h < 6) return;
+  ctx.strokeStyle = '#3a2c22';
+  ctx.lineWidth = Math.max(1.5, 3 * base.s);
+  ctx.beginPath();
+  ctx.moveTo(base.x, base.y);
+  ctx.lineTo(base.x, base.y - h);
+  ctx.stroke();
+  ctx.fillStyle = PALETTE.windowLit;
+  ctx.beginPath();
+  ctx.arc(base.x, base.y - h - 4 * base.s, Math.max(2, 5 * base.s), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 233, 168, 0.18)';
+  ctx.beginPath();
+  ctx.arc(base.x, base.y - h - 4 * base.s, Math.max(4, 14 * base.s), 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** The distant skyline: a dark warm silhouette with a few lit windows. */
+export function drawSkyline(ctx, seed) {
+  const base = FIELD.horizonY;
+  ctx.fillStyle = PALETTE.skyline;
+  let x = -20;
+  let i = 0;
+  while (x < FIELD.width + 20) {
+    const w = 40 + ((seed * (i + 3) * 37) % 70);
+    const h = 26 + ((seed * (i + 7) * 53) % 66);
+    ctx.fillRect(x, base - h, w, h);
+    x += w + 6;
+    i += 1;
   }
-  return best;
+  // The sea glints to the right of the Strand, past the buildings.
+  ctx.fillStyle = PALETTE.sea;
+  ctx.fillRect(FIELD.width * 0.86, base - 4, FIELD.width * 0.14 + 4, 8);
+  ctx.fillStyle = 'rgba(255, 243, 196, 0.7)';
+  ctx.fillRect(FIELD.width * 0.9, base - 2, 60, 2);
 }

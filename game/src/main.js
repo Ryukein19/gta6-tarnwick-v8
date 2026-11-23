@@ -1,22 +1,24 @@
 // Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s
 // steps (several in a slow frame, none in a fast one), and the renderer paints what is
-// there. The game moves between four screens: title, play, paused and game over, plus the
-// foot scene (the night market, on foot).
+// there. The game moves between four screens: title, play, paused and game over.
+// Renn Kovacs drives Tam's Falcon GT through Tarnwick; the police chase; the eight
+// story jobs advance the arc. E steps out of the car to walk Lantern Mile on foot.
 //
-// ?seed=N fixes the layout. ?shot=chase|foot|menu|title (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-
-import { BEST_KEY, STEP } from './config.js';
+// ?seed=N fixes the street. ?shot=chase|foot|menu|title (with &seed=N) stages that
+// scene instead of running the loop, paints it twice and sets window.__shotReady
+// for a screenshot.
+import { BEST_KEY, LIVES, STEP } from './config.js';
 import { createRandom } from './random.js';
-import { createWorld, EVENT_JOB_DONE } from './world.js';
-import {
-  ACTION_CONFIRM, ACTION_PAUSE, ACTION_RADIO, ACTION_MUTE, createInput,
-} from './input.js';
+import { createCity } from './city.js';
+import { createWorld, EVENT_HIT, EVENT_MISSION, EVENT_OVER } from './world.js';
+import { createTraffic } from './traffic.js';
+import { stepPlayer, useAbility } from './player.js';
+import { ACTION_ABILITY_1, ACTION_ABILITY_2, ACTION_ABILITY_3, ACTION_CONFIRM, ACTION_EXIT, ACTION_PAUSE, ACTION_RADIO, createInput } from './input.js';
 import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+import { createAudio } from './audio.js';
 import { stageShot } from './shots.js';
-import { blip, setStation, toggleMute } from './audio.js';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
+/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped. */
 const MAX_FRAME = 0.25;
 
 const params = new URLSearchParams(window.location.search);
@@ -26,8 +28,15 @@ const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() 
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
+const random = createRandom(seed);
+const world = createWorld(random);
+const city = createCity(random);
+const traffic = createTraffic(random);
+world.state.city = city;
+world.state.traffic = traffic;
+world.state.shot = '';
 const renderer = createRenderer(canvas);
+const audio = createAudio();
 
 function readBest() {
   try {
@@ -46,56 +55,57 @@ function saveBest(value) {
 }
 
 function runShot(name) {
-  const scene = stageShot(name, world);
+  // The status pill is an HTML overlay — hide it so it never lands on a screenshot.
+  status.style.display = 'none';
+  const scene = stageShot(name, world, city, traffic);
   let painted = 0;
   function paint() {
-    renderer.draw(world.state, scene.screen, scene.best, seed);
+    renderer.draw(world.state, scene.screen, scene.best);
     painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
+    if (painted >= 2) window.__shotReady = true;
+    // Keep painting: a late resize clears the canvas, and a single stopped frame
+    // would leave it blank. The loop is cheap and the shot is only for screenshots.
+    requestAnimationFrame(paint);
   }
   requestAnimationFrame(paint);
 }
 
 function runGame() {
   const input = createInput(canvas);
+  const wanted = { level: world.state.wanted };
   let screen = SCREEN_TITLE;
   let best = readBest();
   let accumulator = 0;
   let last = performance.now();
 
-  // Screen readers (and anyone watching the page's text) hear the screen changes.
   function announce(message) {
     status.textContent = message;
   }
 
   function startGame() {
     world.reset();
+    world.state.city = city;
+    world.state.traffic = traffic;
+    world.state.shot = '';
+    wanted.level = world.state.wanted;
     accumulator = 0;
     screen = SCREEN_PLAY;
-    blip(660, 0.1);
-    announce('Playing. Job 6 of 8: The Captain\u2019s Car. Wreck Dray\u2019s sedan.');
+    audio.unlock();
+    announce('Playing. Drive the Falcon GT. Lose the police, finish the job.');
   }
 
-  function endGame() {
+  function endGame(busted) {
     screen = SCREEN_OVER;
-    if (world.state.money > best) {
-      best = world.state.money;
+    world.state.busted = busted;
+    if (world.state.score > best) {
+      best = world.state.score;
       saveBest(best);
     }
-    announce(`Busted. Tarnwick PD caught you. Best $${best}.`);
+    announce(busted ? 'Busted. Tarnwick PD took you in.' : 'Wrecked. The Falcon gave out.');
   }
 
   function handleActions() {
     const actions = input.takeActions();
-    if (actions & ACTION_RADIO) {
-      const station = setStation(1);
-      announce(`Radio: ${station.freq} — ${station.show}.`);
-    }
-    if (actions & ACTION_MUTE) {
-      toggleMute();
-      announce('Muted.');
-    }
     if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
     else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
@@ -104,15 +114,42 @@ function runGame() {
       screen = SCREEN_PLAY;
       announce('Playing.');
     }
+    if (screen !== SCREEN_PLAY) return;
+    if (actions & ACTION_EXIT) {
+      world.state.onFoot = !world.state.onFoot;
+      announce(world.state.onFoot ? 'On foot. Walk Lantern Mile.' : 'Back in the Falcon GT.');
+    }
+    if (actions & ACTION_RADIO) {
+      world.state.radio = (world.state.radio + 1) % 3;
+    }
+    if (actions & ACTION_ABILITY_1) {
+      const line = useAbility(world.state, wanted, 0);
+      if (line) announce(line);
+    }
+    if (actions & ACTION_ABILITY_2) {
+      const line = useAbility(world.state, wanted, 1);
+      if (line) announce(line);
+    }
+    if (actions & ACTION_ABILITY_3) {
+      const line = useAbility(world.state, wanted, 2);
+      if (line) announce(line);
+    }
   }
 
   function step() {
-    if (screen === SCREEN_TITLE) return;
-    const events = world.step(STEP, input.direction(), input.throttle());
-    if (events & EVENT_JOB_DONE) {
-      announce('Job done. Leave it smoking on the Strand.');
+    if (screen === SCREEN_TITLE) {
+      world.step(STEP, 0, true);
+      return;
     }
-    if (world.state.timer === 0 && screen === SCREEN_PLAY) endGame();
+    const direction = input.direction();
+    const state = world.state;
+    stepPlayer(state, STEP, direction, input.throttle(), input.brake());
+    const events = world.step(STEP, direction, false);
+    state.wanted = wanted.level;
+    audio.frame(state.speed, state.wanted, state.radio, STEP);
+    if (events & EVENT_OVER) endGame(false);
+    else if (events & EVENT_HIT) announce('Hit. The Falcon took damage.');
+    else if (events & EVENT_MISSION) announce('Time up — Dray’s sedan got away. The job goes on.');
   }
 
   function frame(now) {
@@ -128,10 +165,9 @@ function runGame() {
     } else {
       accumulator = 0;
     }
-    renderer.draw(world.state, screen, best, seed);
+    renderer.draw(world.state, screen, best);
   }
 
-  // Leaving the tab pauses a running game rather than letting the timer run unseen.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;

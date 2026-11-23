@@ -1,39 +1,53 @@
-// Missions: the 8 story jobs in one 5-act arc. Renn Kovacs comes home after six years;
-// his brother Tam is dead, the Kovac Garage is about to be seized, the Strand crew is
-// down to three — and the fixer who welcomed him home set up the run that killed Tam.
-// The cover stages job 6, "THE CAPTAIN'S CAR", with a ticking timer and a day counter.
+// The eight story jobs across the five-act arc. Each mission knows its act, its
+// objective, the line that advances it, and what the next job asks for. The current
+// job for the cover is JOB 6/8 — THE CAPTAIN'S CAR.
 
 import { MISSIONS } from './config.js';
 
-/** The mission staged on the cover: job 6, act 3. */
-export function coverMission() {
-  return MISSIONS[5];
+export { MISSIONS };
+
+export function missionById(id) {
+  return MISSIONS[id - 1];
 }
 
-/** Look a mission up by number (1–8). */
-export function missionByNumber(n) {
-  return MISSIONS.find((m) => m.n === n) || MISSIONS[0];
+/** The act a mission belongs to, as a Roman numeral for the HUD. */
+export function actNumeral(act) {
+  return ['I', 'II', 'III', 'IV', 'V'][act - 1] ?? 'I';
 }
 
-/** The act a mission belongs to, as a label. */
-export function actLabel(mission) {
-  return `ACT ${mission.act}`;
+/** "JOB 6/8" label for a mission id. */
+export function jobLabel(id) {
+  return `JOB ${id}/8`;
 }
 
-/** A countdown string from a remaining-seconds count. */
-export function formatTimer(seconds) {
-  const s = Math.max(0, Math.ceil(seconds));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, '0')}`;
+/** How far through the story the player is, as a 0..1 fraction. */
+export function storyFraction(id) {
+  return (id - 1) / MISSIONS.length;
 }
 
-/** The mission timer for the cover: 1:47, ticking down. */
-export function coverTimerSeconds() {
-  return 107;
+/** The next mission after this one, or null after the finale. */
+export function nextMission(id) {
+  return id < MISSIONS.length ? MISSIONS[id] : null;
 }
 
-/** Progress through the story, for the pause menu bars. */
-export function storyProgress() {
-  return { story: '4/8', races: '2/4', stunts: '3/8', collectibles: '9/20', districtJobs: '5/7', crew: '3/3' };
-}
+/** The staged cover mission: JOB 6/8, THE CAPTAIN'S CAR, STAGE 2/4, timer 1:47. */
+export const COVER_MISSION = {
+  id: 6,
+  timer: 107,
+  stage: 2,
+  stages: 4,
+  sedanDamage: 58,
+  day: 6,
+  clock: '18:47',
+  money: 24600,
+};
+
+/** The on-foot mission: JOB 3/8, STALL MONEY, Lantern Mile, 2 of 5 collected. */
+export const FOOT_MISSION = {
+  id: 3,
+  collected: 2,
+  total: 5,
+  day: 3,
+  clock: '21:12',
+  money: 1840,
+};

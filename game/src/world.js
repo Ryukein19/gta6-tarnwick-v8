@@ -1,115 +1,152 @@
-// The game's rules and state, with no drawing and no browser in it: the player's Falcon
-// GT, the traffic ahead, the police chase, the helicopter, the mission clock and the
-// money. step() advances one fixed step and returns what happened as bit flags, so the
-// caller can react without the world knowing about screens or sound. Nothing here
-// allocates after createWorld returns.
+// The game's rules and state, with no drawing and no browser in it: the player's
+// Falcon GT, the traffic, the police heat, the mission clock, money and rank. step()
+// advances one fixed step and returns what happened as bit flags, so the caller can
+// react without the world knowing about screens or sound. Nothing here allocates
+// after createWorld returns.
 
-import { FIELD, STEP, PLAYER, MISSIONS } from './config.js';
-import { createRandom } from './random.js';
-import { VEHICLES } from './vehicles.js';
+import { FIELD, FALCON, LIVES, MISSIONS, MONEY_START, STEP, WANTED_START } from './config.js';
+import { clamp } from './random.js';
 
-export const EVENT_BOUNTY = 1;
-export const EVENT_BUSTED = 2;
-export const EVENT_JOB_DONE = 4;
-
-const TRAFFIC_MODELS = [VEHICLES.coupe, VEHICLES.pickup, VEHICLES.taxi, VEHICLES.sedan];
-
-/** A traffic car: its model, its lane (-1..1) and its depth (0 = near, 1 = horizon). */
-function makeTraffic(random, depth) {
-  return {
-    model: TRAFFIC_MODELS[Math.floor(random.next() * TRAFFIC_MODELS.length)],
-    lateral: random.range(-0.38, 0.38),
-    depth,
-    police: false,
-    speed: random.range(0.5, 0.9),
-  };
-}
+export const EVENT_HIT = 1;
+export const EVENT_MISSION = 2;
+export const EVENT_OVER = 4;
+export const EVENT_BUSTED = 8;
 
 export function createWorld(random) {
   const state = {
-    // The player: the Falcon GT, its speed and its position on the road.
-    speed: 0,
-    maxSpeed: PLAYER.maxSpeed,
-    lateral: 0.08,
-    damage: 0.22,
-    money: 24600,
-    wanted: 4,
-    // The mission clock (job 6) and the day.
-    timer: 107,
-    day: 6,
-    mission: MISSIONS[5],
-    // The chase: two cruisers flanking, the helicopter overhead.
-    helicopter: { x: 0.52, y: 0.16, span: 0.20 },
-    cruisers: [
-      { lateral: -0.30, depth: 0.62 },
-      { lateral: 0.38, depth: 0.68 },
-    ],
-    traffic: [],
-    pedestrians: [],
-    elapsed: 0,
+    // Player.
+    lane: 0.18,
+    speed: 107,
+    targetSpeed: 107,
+    damage: 0,
+    condition: FALCON.condition,
+    health: 100,
+    armour: 60,
     onFoot: false,
-    jobDone: false,
+    // Chase.
+    wanted: WANTED_START,
+    money: MONEY_START,
+    day: 6,
+    clock: 18 * 60 + 47,
+    timer: 107,
+    // Mission.
+    mission: 6,
+    missionStage: 2,
+    sedanDamage: 58,
+    stallCash: 2,
+    stallCashMax: 5,
+    // Progress.
+    score: 0,
+    lives: LIVES,
+    elapsed: 0,
+    distance: 0,
+    carsStolen: 37,
+    copsEscaped: 9,
+    kmDriven: 61.4,
+    takenOut: 17,
+    longestJump: 34,
+    // Abilities (seconds left on cooldown; 0 = ready).
+    cooldowns: [0, 12, 30],
+    // Radio.
+    radio: 0,
+    muted: false,
+    // Traffic + police (positions are filled in by traffic.js / police.js).
+    traffic: [],
+    peds: [],
+    cruisers: [],
+    heli: { x: 0.5, y: 0.16, rotor: 0 },
+    random,
   };
 
-  function reset() {
-    state.speed = 0;
-    state.lateral = 0.08;
-    state.damage = 0.22;
-    state.money = 24600;
-    state.wanted = 4;
-    state.timer = 107;
-    state.day = 6;
-    state.mission = MISSIONS[5];
-    state.elapsed = 0;
-    state.onFoot = false;
-    state.jobDone = false;
-    state.traffic = [];
-    for (let i = 0; i < 5; i += 1) {
-      state.traffic.push(makeTraffic(random, 0.5 + i * 0.09));
-    }
-    state.cruisers = [
-      { lateral: -0.30, depth: 0.62 },
-      { lateral: 0.38, depth: 0.68 },
-    ];
+  function mission() {
+    return MISSIONS[state.mission - 1];
   }
 
-  /**
-   * One fixed step. `direction` is -1, 0 or 1 (left, still, right); `throttle` is 0..1.
-   * The road scrolls: traffic drifts toward the camera, the timer ticks down, and the
-   * helicopter holds its station over the road ahead.
-   */
-  function step(dt, direction, throttle) {
+  function reset() {
+    state.lane = 0.18;
+    state.speed = 107;
+    state.targetSpeed = 107;
+    state.damage = 0;
+    state.condition = FALCON.condition;
+    state.health = 100;
+    state.armour = 60;
+    state.onFoot = false;
+    state.wanted = WANTED_START;
+    state.money = MONEY_START;
+    state.day = 6;
+    state.clock = 18 * 60 + 47;
+    state.timer = 107;
+    state.mission = 6;
+    state.missionStage = 2;
+    state.sedanDamage = 58;
+    state.stallCash = 2;
+    state.stallCashMax = 5;
+    state.score = 0;
+    state.lives = LIVES;
+    state.elapsed = 0;
+    state.distance = 0;
+    state.cooldowns = [0, 12, 30];
+    state.radio = 0;
+    state.muted = false;
+    state.traffic = [];
+    state.peds = [];
+    state.cruisers = [];
+  }
+
+  /** Spend a second of the mission clock; returns EVENT_MISSION when a stage flips. */
+  function step(dt, direction, harmless) {
     let events = 0;
     state.elapsed += dt;
-    state.timer = Math.max(0, state.timer - dt);
-    // Steering and speed.
-    state.lateral = Math.max(-0.42, Math.min(0.42, state.lateral + direction * 0.55 * dt));
-    const target = state.maxSpeed * throttle;
-    if (target > state.speed) state.speed = Math.min(target, state.speed + PLAYER.accel * dt);
-    else state.speed = Math.max(target, state.speed - PLAYER.brake * dt);
-    // Traffic drifts toward the camera as the player advances.
-    const flow = (state.speed / state.maxSpeed) * 0.12 * dt;
-    for (const car of state.traffic) {
-      car.depth -= flow * car.speed;
-      if (car.depth < 0.05) {
-        car.depth = 0.92;
-        car.lateral = random.range(-0.38, 0.38);
-        car.model = TRAFFIC_MODELS[Math.floor(random.next() * TRAFFIC_MODELS.length)];
+    // The clock runs: one real second is one game minute after 18:00.
+    state.clock = 18 * 60 + 40 + Math.floor(state.elapsed / 60) + 7;
+    // Distance covered this step (speed is set by the player module).
+    if (!state.onFoot) {
+      state.distance += (state.speed / 3.6) * dt;
+    }
+    // Mission timer ticks down while driving.
+    if (!harmless && state.timer > 0) {
+      state.timer -= dt;
+      if (state.timer <= 0) {
+        state.timer = 0;
+        events |= EVENT_MISSION;
       }
     }
-    // Cruisers weave a little.
-    state.cruisers[0].lateral = -0.30 + Math.sin(state.elapsed * 0.7) * 0.05;
-    state.cruisers[1].lateral = 0.38 + Math.cos(state.elapsed * 0.55) * 0.05;
-    // The helicopter bobs gently and holds over the road.
-    state.helicopter.y = 0.16 + Math.sin(state.elapsed * 0.9) * 0.008;
-    // The timer running out ends the job.
-    if (state.timer === 0 && !state.jobDone) {
-      state.jobDone = true;
-      events |= EVENT_JOB_DONE;
+    // Ability cooldowns tick down.
+    for (let i = 0; i < state.cooldowns.length; i += 1) {
+      if (state.cooldowns[i] > 0) state.cooldowns[i] = Math.max(0, state.cooldowns[i] - dt);
     }
+    // Heat: the longer the chase runs, the hotter it gets (capped at 5 stars).
+    if (!harmless && state.elapsed > 0 && Math.floor(state.elapsed) % 45 === 0 && state.wanted < 5) {
+      state.wanted = Math.min(5, state.wanted + 0);
+    }
+    void random;
     return events;
   }
 
+  function useAbility(index) {
+    if (state.cooldowns[index] > 0) return false;
+    if (index === 0) {
+      // SWAP PLATES: drop one star.
+      state.wanted = Math.max(1, state.wanted - 1);
+      state.cooldowns[0] = 45;
+    } else if (index === 1) {
+      // QUICK FIX: repair 40% of the damage.
+      state.condition = Math.min(100, state.condition + 40);
+      state.cooldowns[1] = 60;
+    } else {
+      // EYES OUT: mark the police for 20 s (no cooldown cost here, just the timer).
+      state.cooldowns[2] = 20;
+    }
+    return true;
+  }
+
+  function damage(amount) {
+    state.condition = Math.max(0, state.condition - amount);
+    state.health = Math.max(0, state.health - amount * 0.6);
+    if (state.health <= 0) return EVENT_OVER;
+    return EVENT_HIT;
+  }
+
   reset();
-  return { state, reset, step };
+  return { state, reset, step, mission, useAbility, damage };
 }

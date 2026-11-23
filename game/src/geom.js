@@ -1,70 +1,50 @@
-// Geometry helpers for the pseudo-3D chase view: a perspective road that recedes to a
-// vanishing point on the horizon, and the shapes everything else is built from. The world
-// is drawn on a 2D canvas with hand-tuned perspective — no library, no network — so the
-// staged screenshots come out exactly as composed.
+// Pseudo-3D projection: the camera sits low behind the hero car and looks down the
+// road toward the horizon. A point is given as (x, z) where x is lateral (-1 = far
+// left edge of the road plane, +1 = far right edge) and z is depth (0 = at the
+// camera, 1 = the horizon). The projection pulls everything toward the centre as z
+// grows, and shrinks it — the two things that make a flat drawing read as depth.
 
 import { FIELD } from './config.js';
 
-/** The chase camera: the road's vanishing point and the horizon line. */
-export const CAMERA = { vx: FIELD.width * 0.52, horizonY: FIELD.horizonY };
-
 /**
- * Perspective scale for a depth in [0, 1] (0 = at the camera, 1 = at the horizon).
- * Objects shrink toward the vanishing point; the curve keeps near objects big.
+ * Project a road-plane point to the screen.
+ * Returns { x, y, s } where s is the perspective scale (1 at the camera, 0 at the
+ * horizon) — multiply widths and heights by s to keep things the right size.
  */
-export function depthScale(depth) {
-  const d = Math.max(0, Math.min(1, depth));
-  return (1 - d) * (1 - d) * 0.92 + 0.08;
+export function project(x, z) {
+  const t = 1 - z;
+  const s = t * t;
+  const y = FIELD.horizonY + (FIELD.groundY - FIELD.horizonY) * s;
+  const px = FIELD.width / 2 + x * (FIELD.width * 0.62) * s;
+  return { x: px, y, s };
 }
 
-/** Screen y for a depth: the horizon line at depth 1, the bottom of the frame at depth 0. */
-export function depthY(depth) {
-  const d = Math.max(0, Math.min(1, depth));
-  return CAMERA.horizonY + (1 - d) * (1 - d) * (FIELD.height - CAMERA.horizonY);
+/** The half-width of the road on screen at depth z (in pixels). */
+export function roadHalfWidth(z) {
+  const t = 1 - z;
+  return FIELD.width * 0.42 * t * t + 26;
 }
 
-/** Screen x for a lateral offset (-1 = far left, 1 = far right) at a depth. */
-export function depthX(lateral, depth) {
-  const s = depthScale(depth);
-  return CAMERA.vx + lateral * s * FIELD.width * 0.62;
+/** Screen x of a lane position (-1..1 across the road) at depth z. */
+export function roadX(lane, z) {
+  return FIELD.width / 2 + lane * roadHalfWidth(z);
 }
 
-/** A rounded rectangle path, for HUD panels and buttons. */
-export function roundRect(ctx, x, y, w, h, r) {
-  const rad = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rad, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rad);
-  ctx.arcTo(x + w, y + h, x, y + h, rad);
-  ctx.arcTo(x, y + h, x, y, rad);
-  ctx.arcTo(x, y, x + w, y, rad);
-  ctx.closePath();
+/** Screen y of the road surface at depth z. */
+export function roadY(z) {
+  const t = 1 - z;
+  return FIELD.horizonY + (FIELD.groundY - FIELD.horizonY) * t * t;
 }
 
-/** A soft ellipse shadow under a car, person or helicopter. */
-export function groundShadow(ctx, x, y, w, h, alpha) {
-  ctx.save();
-  ctx.fillStyle = `rgba(20, 10, 10, ${alpha})`;
-  ctx.beginPath();
-  ctx.ellipse(x, y, w / 2, h / 2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+/** A point on the left or right sidewalk at depth z (side is -1 left, +1 right). */
+export function sidewalkX(side, z) {
+  const t = 1 - z;
+  return FIELD.width / 2 + side * (roadHalfWidth(z) + 26 * t * t + 8);
 }
 
-/** A five-point star, for the wanted level. */
-export function star(ctx, cx, cy, r, colour) {
-  ctx.save();
-  ctx.fillStyle = colour;
-  ctx.beginPath();
-  for (let i = 0; i < 10; i += 1) {
-    const rad = i % 2 === 0 ? r : r * 0.45;
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const x = cx + Math.cos(a) * rad;
-    const y = cy + Math.sin(a) * rad;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
+/** Long golden-hour shadows fall toward the viewer: shift a ground point down and
+ *  sideways by a small amount that grows with height. */
+export function shadowOffset(height, z) {
+  const t = 1 - z;
+  return { x: -height * 0.35 * t, y: height * 0.22 * t };
 }

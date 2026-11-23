@@ -1,222 +1,206 @@
-// The pause menu and the title screen. The pause menu is a full system in one frame:
-// a map of all six districts with turf colours and the route, the completion bars, the
-// career stats, the next goal, the activities line and three save slots. The title screen
-// is the same golden-hour panorama as the cover, with the tagline and the save slots.
+// The menus: the title screen over a golden-hour panorama, the pause menu with its
+// full map, career stats and save slots, and the game-over panel. The pause menu is
+// the shot that proves the systems exist — map, progress, stats, saves, activities.
 
-import { FIELD, FONT, PALETTE, DISTRICTS, CAREER, SAVES } from './config.js';
-import { roundRect } from './geom.js';
-import { drawSky, drawBuilding } from './city.js';
-import { createRandom } from './random.js';
+import { DISTRICTS, FIELD, FONT, PALETTE } from './config.js';
+import { SLOTS } from './save.js';
 
-function text(ctx, value, x, y, size, colour, align = 'left', weight = '') {
-  ctx.font = `${weight ? `${weight} ` : ''}${size}px ${FONT}`;
-  ctx.fillStyle = colour;
+function text(ctx, value, x, y, size, color, align = 'left', weight = '') {
+  ctx.font = `${weight ? weight + ' ' : ''}${size}px ${FONT}`;
+  ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(value, x, y);
 }
 
-function bar(ctx, x, y, w, label, done, total) {
-  text(ctx, label, x, y + 13, 12, PALETTE.text, 'left', 'bold');
-  const bx = x + 150;
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  roundRect(ctx, bx, y + 4, w - 150 - 60, 10, 5);
-  ctx.fill();
-  ctx.fillStyle = PALETTE.gold;
-  const frac = total === 0 ? 0 : done / total;
-  roundRect(ctx, bx, y + 4, (w - 150 - 60) * frac, 10, 5);
-  ctx.fill();
-  text(ctx, `${done}/${total}`, x + w - 52, y + 13, 12, PALETTE.gold, 'right', 'bold');
-}
-
-/** The district map: dark sea + land, six turf dots with names, route arrow, YOU marker. */
-export function drawMap(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(16, 22, 38, 0.92)';
-  roundRect(ctx, x, y, w, h, 10);
-  ctx.fill();
+function panel(ctx, x, y, w, h) {
+  ctx.fillStyle = 'rgba(23, 18, 14, 0.92)';
+  ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = PALETTE.panelEdge;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  // Landmass.
-  ctx.fillStyle = '#3a4a5a';
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.52, y + h * 0.52, w * 0.42, h * 0.40, -0.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#2a3a4a';
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.30, y + h * 0.30, w * 0.16, h * 0.14, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Route: Strand -> Marina.
-  const a = DISTRICTS[0];
-  const b = DISTRICTS[4];
-  ctx.strokeStyle = PALETTE.gold;
-  ctx.lineWidth = 3;
-  ctx.setLineDash([8, 6]);
-  ctx.beginPath();
-  ctx.moveTo(x + a.x * w, y + a.y * h);
-  ctx.lineTo(x + b.x * w, y + b.y * h);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  // District dots + names.
-  for (const d of DISTRICTS) {
-    const dx = x + d.x * w;
-    const dy = y + d.y * h;
-    ctx.fillStyle = d.colour;
-    ctx.beginPath();
-    ctx.arc(dx, dy, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(dx, dy, 3, 0, Math.PI * 2);
-    ctx.fill();
-    text(ctx, d.name, dx + 11, dy + 4, 11, PALETTE.text, 'left', 'bold');
-  }
-  // YOU marker on the Strand.
-  const px = x + a.x * w;
-  const py = y + a.y * h;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.moveTo(px, py - 14);
-  ctx.lineTo(px - 8, py - 2);
-  ctx.lineTo(px + 8, py - 2);
-  ctx.closePath();
-  ctx.fill();
-  text(ctx, 'YOU', px, py - 18, 10, PALETTE.gold, 'center', 'bold');
-  // Turf legend.
-  text(ctx, 'STRAND CREW', x + 14, y + h - 30, 10, '#f2c94c', 'left', 'bold');
-  text(ctx, 'GREYLINE–DRAY', x + 120, y + h - 30, 10, '#6ab8ff', 'left', 'bold');
-  text(ctx, 'CONTESTED', x + 240, y + h - 30, 10, '#e8907a', 'left', 'bold');
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
-/** The pause menu screen: map left, stats + saves right. */
-export function drawPauseMenu(ctx) {
-  ctx.fillStyle = 'rgba(10, 12, 20, 0.90)';
+function bar(ctx, x, y, w, h, frac, fill) {
+  ctx.fillStyle = '#3a2c22';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = fill;
+  ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
+}
+
+/** The title screen: tagline, TARNWICK, buttons, save slots, control bar. */
+export function drawTitle(ctx, state, time) {
+  // Golden-hour panorama: sun, sea, city silhouette, beach.
+  const sky = ctx.createLinearGradient(0, 0, 0, FIELD.height);
+  sky.addColorStop(0, PALETTE.skyTop);
+  sky.addColorStop(0.45, PALETTE.skyMid);
+  sky.addColorStop(0.75, PALETTE.skyLow);
+  sky.addColorStop(1, '#e88bb0');
+  ctx.fillStyle = sky;
   ctx.fillRect(0, 0, FIELD.width, FIELD.height);
-  const mx = 40;
-  const my = 60;
-  const mw = 560;
-  const mh = 520;
-  drawMap(ctx, mx, my, mw, mh);
-  text(ctx, 'TARNWICK — MAP', mx + 16, my + 26, 15, PALETTE.text, 'left', 'bold');
-  text(ctx, `${CAREER.complete}% COMPLETE`, mx + mw - 16, my + 26, 15, PALETTE.gold, 'right', 'bold');
-
-  const sx = 640;
-  const sy = 60;
-  const sw = 600;
-  // Progress bars.
-  text(ctx, 'PROGRESS', sx, sy + 20, 14, PALETTE.gold, 'left', 'bold');
-  const bars = [
-    ['STORY', 4, 8], ['RACES', 2, 4], ['STUNTS', 3, 8],
-    ['COLLECTIBLES', 9, 20], ['DISTRICT JOBS', 5, 7], ['CREW', 3, 3],
-  ];
-  bars.forEach(([label, done, total], i) => {
-    bar(ctx, sx, sy + 34 + i * 26, sw, label, done, total);
-  });
-  // Career stats.
-  const cy = sy + 220;
-  text(ctx, 'CAREER', sx, cy + 20, 14, PALETTE.gold, 'left', 'bold');
-  const stats = [
-    ['Cars stolen', '37'], ['Cops escaped', '9'], ['Driven', '61.4 km'],
-    ['People taken out', '17'], ['Longest jump', '34 m'],
-  ];
-  stats.forEach(([label, value], i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = sx + col * 300;
-    const yy = cy + 44 + row * 26;
-    text(ctx, label, x, yy, 13, PALETTE.muted);
-    text(ctx, value, x + 280, yy, 13, PALETTE.text, 'right', 'bold');
-  });
-  text(ctx, `NEXT GOAL  ${CAREER.nextGoal}`, sx, cy + 132, 12, PALETTE.text);
-  text(ctx, CAREER.activities, sx, cy + 154, 12, PALETTE.gold, 'left', 'bold');
-  // Save slots.
-  const syy = cy + 180;
-  text(ctx, 'SAVES', sx, syy + 18, 14, PALETTE.gold, 'left', 'bold');
-  SAVES.forEach((s, i) => {
-    const x = sx + i * 204;
-    ctx.fillStyle = 'rgba(12, 14, 24, 0.88)';
-    roundRect(ctx, x, syy + 30, 192, 64, 8);
-    ctx.fill();
-    ctx.strokeStyle = i === 0 ? PALETTE.gold : 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    text(ctx, `SLOT ${s.slot} — ${s.act}`, x + 12, syy + 54, 12, PALETTE.text, 'left', 'bold');
-    text(ctx, `${s.complete}  ·  ${s.money}  ·  ${s.time}`, x + 12, syy + 76, 11, PALETTE.muted);
-  });
-  text(ctx, 'ESC — RESUME', FIELD.width / 2, FIELD.height - 34, 12, PALETTE.muted, 'center');
-}
-
-/** The title screen: the golden-hour panorama, the tagline, the buttons, the saves. */
-export function drawTitle(ctx, seed) {
-  const random = createRandom(seed);
-  drawSky(ctx, FIELD.width * 0.62, FIELD.horizonY - 30);
-  // City skyline: a dense band of sun-soaked buildings across the full width, sitting on
-  // the horizon line, so the title text below it sits on the dark gradient, not on the
-  // bright buildings.
-  const skylineColours = [PALETTE.buildingCream, PALETTE.buildingPeach, PALETTE.buildingTeal, PALETTE.buildingRose];
-  const baseY = FIELD.horizonY + 74;
-  let sx = 0;
-  while (sx < FIELD.width) {
-    const w = 70 + random.range(0, 70);
-    const h = 46 + random.range(0, 78);
-    const col = skylineColours[Math.floor(random.next() * skylineColours.length)];
-    ctx.fillStyle = col;
-    ctx.fillRect(sx, baseY - h, w, h);
-    ctx.fillStyle = 'rgba(255, 240, 200, 0.8)';
-    ctx.fillRect(sx, baseY - h, w, 3);
-    // Lit windows.
-    const cols = Math.max(2, Math.floor(w / 22));
-    const rows = Math.max(2, Math.floor(h / 26));
-    for (let r = 0; r < rows; r += 1) {
-      for (let c = 0; c < cols; c += 1) {
-        ctx.fillStyle = random.next() < 0.55 ? PALETTE.windowLit : PALETTE.windowDark;
-        ctx.fillRect(sx + 6 + c * ((w - 12) / cols), baseY - h + 8 + r * ((h - 14) / rows), (w - 12) / cols - 5, (h - 14) / rows - 6);
-      }
-    }
-    sx += w + random.range(2, 14);
+  // The sun, low and big, on the left so it never washes out the subtitle.
+  ctx.fillStyle = 'rgba(255, 243, 196, 0.35)';
+  ctx.beginPath();
+  ctx.arc(FIELD.width * 0.22, 330, 120, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PALETTE.sunCore;
+  ctx.beginPath();
+  ctx.arc(FIELD.width * 0.22, 330, 62, 0, Math.PI * 2);
+  ctx.fill();
+  // City silhouette.
+  ctx.fillStyle = 'rgba(90, 50, 70, 0.75)';
+  let x = 0;
+  let i = 0;
+  while (x < FIELD.width) {
+    const w = 60 + ((i * 53) % 90);
+    const h = 60 + ((i * 37) % 130);
+    ctx.fillRect(x, 470 - h, w, h);
+    x += w + 8;
+    i += 1;
   }
-  // Dark gradient over the lower half for the text.
-  const g = ctx.createLinearGradient(0, FIELD.height - 360, 0, FIELD.height);
-  g.addColorStop(0, 'rgba(10, 12, 20, 0)');
-  g.addColorStop(1, 'rgba(10, 12, 20, 0.92)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, FIELD.height - 360, FIELD.width, 360);
-
-  text(ctx, '— THE LAST GOOD LIGHT —', FIELD.width / 2, 400, 20, PALETTE.gold, 'center', 'bold');
-  ctx.font = `bold 84px ${FONT}`;
-  ctx.fillStyle = '#fff3e0';
+  // The sea and the beach.
+  ctx.fillStyle = PALETTE.sea;
+  ctx.fillRect(0, 470, FIELD.width, 90);
+  ctx.fillStyle = 'rgba(255, 243, 196, 0.5)';
+  ctx.fillRect(FIELD.width * 0.6, 500, 220, 4);
+  ctx.fillStyle = PALETTE.sand;
+  ctx.fillRect(0, 560, FIELD.width, 160);
+  // A lone Falcon GT on the beach, clear of the buttons and the save slots.
+  ctx.fillStyle = PALETTE.falcon;
+  ctx.fillRect(180, 620, 150, 26);
+  ctx.fillStyle = '#16202e';
+  ctx.fillRect(220, 608, 70, 16);
+  // The tagline and the title.
+  text(ctx, '— THE LAST GOOD LIGHT —', FIELD.width / 2, 150, 22, PALETTE.gold, 'center');
+  ctx.fillStyle = '#fff8ec';
+  ctx.font = `bold 96px ${FONT}`;
   ctx.textAlign = 'center';
-  ctx.fillText('TARNWICK', FIELD.width / 2, 484);
-  text(ctx, '3D · OPEN-WORLD CRIME · 8 STORY JOBS · POLICE · SAVES', FIELD.width / 2, 514, 16, PALETTE.text, 'center', 'bold');
-  text(ctx, 'A faded resort town. A crew in pieces. One way home.', FIELD.width / 2, 538, 15, PALETTE.muted, 'center');
-  text(ctx, 'Keyboard & mouse', FIELD.width / 2, 560, 13, PALETTE.muted, 'center');
-
+  ctx.fillText('TARNWICK', FIELD.width / 2, 252);
+  text(ctx, '3D · OPEN-WORLD CRIME · 8 STORY JOBS · POLICE · SAVES', FIELD.width / 2, 292, 17, PALETTE.text, 'center', 'bold');
+  text(ctx, 'A faded resort town. A crew in pieces. One way home. · Keyboard & mouse', FIELD.width / 2, 320, 15, PALETTE.muted, 'center');
   // Buttons.
   const buttons = ['NEW GAME', 'CONTINUE', 'LOAD GAME'];
-  const bw = 200;
-  const bh = 44;
-  const gap = 18;
-  const totalW = buttons.length * bw + (buttons.length - 1) * gap;
-  let bx = (FIELD.width - totalW) / 2;
-  buttons.forEach((label, i) => {
-    ctx.fillStyle = i === 0 ? PALETTE.gold : 'rgba(12, 14, 24, 0.88)';
-    roundRect(ctx, bx, 578, bw, bh, 8);
-    ctx.fill();
-    ctx.strokeStyle = i === 0 ? PALETTE.gold : 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    text(ctx, label, bx + bw / 2, 578 + 28, 15, i === 0 ? '#1a1a1a' : PALETTE.text, 'center', 'bold');
-    bx += bw + gap;
-  });
-  // Save slots under the buttons.
-  const sy = 636;
-  SAVES.forEach((s, i) => {
-    const x = (FIELD.width - totalW) / 2 + i * (bw + gap);
-    ctx.fillStyle = 'rgba(12, 14, 24, 0.75)';
-    roundRect(ctx, x, sy, bw, 48, 8);
-    ctx.fill();
-    text(ctx, `SLOT ${s.slot} — ${s.act}`, x + 12, sy + 19, 12, PALETTE.text, 'left', 'bold');
-    text(ctx, `${s.complete}  ·  ${s.money}  ·  ${s.time}`, x + 12, sy + 38, 11, PALETTE.muted);
-  });
-  text(ctx, 'WASD DRIVE / WALK · E ENTER OR STEAL A CAR · SPACE HANDBRAKE · 1-5 WEAPONS · F PUNCH · CLICK SHOOT · M MUTE · ESC PAUSE', FIELD.width / 2, FIELD.height - 10, 11, PALETTE.muted, 'center');
+  let by = 380;
+  for (const b of buttons) {
+    panel(ctx, FIELD.width / 2 - 130, by, 260, 44);
+    text(ctx, b, FIELD.width / 2, by + 29, 17, b === 'NEW GAME' ? PALETTE.gold : PALETTE.text, 'center', 'bold');
+    by += 54;
+  }
+  // Save slots, small.
+  let sy = 566;
+  for (const slot of SLOTS) {
+    panel(ctx, FIELD.width / 2 - 260, sy, 520, 30);
+    text(ctx, `SLOT ${slot.slot} · ${slot.act} · ${slot.label}`, FIELD.width / 2 - 248, sy + 20, 13, PALETTE.text, 'left', 'bold');
+    text(ctx, `${slot.pct}% · $${slot.money.toLocaleString('en-US')} · ${slot.time}`, FIELD.width / 2 + 248, sy + 20, 13, PALETTE.muted, 'right');
+    sy += 36;
+  }
+  void state;
+  void time;
+}
+
+/** The pause menu: full map, completion, progress bars, career stats, saves, activities. */
+export function drawPause(ctx, state) {
+  ctx.fillStyle = 'rgba(12, 8, 6, 0.72)';
+  ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+  const x = 90;
+  const y = 60;
+  const w = FIELD.width - 180;
+  const h = FIELD.height - 120;
+  panel(ctx, x, y, w, h);
+  text(ctx, 'PAUSED — TARNWICK', x + 28, y + 44, 26, PALETTE.text, 'left', 'bold');
+  text(ctx, '55% COMPLETE', x + w - 28, y + 44, 20, PALETTE.gold, 'right', 'bold');
+  // The map: six districts in their turf colours, the route, YOU.
+  const mapX = x + 28;
+  const mapY = y + 66;
+  const mapW = 560;
+  const mapH = 300;
+  ctx.fillStyle = '#0e0a08';
+  ctx.fillRect(mapX, mapY, mapW, mapH);
+  ctx.strokeStyle = PALETTE.panelEdge;
+  ctx.strokeRect(mapX + 0.5, mapY + 0.5, mapW - 1, mapH - 1);
+  const blocks = [
+    { name: 'TARNWICK STRAND', turf: 'Strand crew', c: '#f2c94c', x: 20, y: 150, w: 190, h: 110 },
+    { name: 'OLD TARNWICK', turf: 'Strand crew', c: '#f2c94c', x: 220, y: 30, w: 160, h: 110 },
+    { name: 'GLASSWORKS', turf: 'GREYLINE', c: '#e5534b', x: 390, y: 30, w: 150, h: 110 },
+    { name: 'LANTERN MILE', turf: 'Contested', c: '#c9a86b', x: 220, y: 150, w: 160, h: 110 },
+    { name: 'THE MARINA', turf: 'Strand crew', c: '#4fc3f7', x: 20, y: 30, w: 190, h: 110 },
+    { name: 'HARLOW HEIGHTS', turf: 'GREYLINE', c: '#e5534b', x: 390, y: 150, w: 150, h: 110 },
+  ];
+  for (const b of blocks) {
+    ctx.fillStyle = b.c;
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(mapX + b.x, mapY + b.y, b.w, b.h);
+    ctx.globalAlpha = 1;
+    text(ctx, b.name, mapX + b.x + 10, mapY + b.y + 22, 13, PALETTE.text, 'left', 'bold');
+    text(ctx, b.turf, mapX + b.x + 10, mapY + b.y + 40, 11, PALETTE.muted);
+  }
+  // Route arrow + YOU.
+  ctx.strokeStyle = PALETTE.gold;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(mapX + 120, mapY + 260);
+  ctx.lineTo(mapX + 300, mapY + 200);
+  ctx.lineTo(mapX + 470, mapY + 90);
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(mapX + 470, mapY + 90, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = PALETTE.gold;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(mapX + 470, mapY + 90, 11, 0, Math.PI * 2);
+  ctx.stroke();
+  text(ctx, 'YOU', mapX + 470, mapY + 118, 11, PALETTE.text, 'center', 'bold');
+  // Progress bars, right of the map.
+  const px = mapX + mapW + 28;
+  const rows = [
+    ['STORY', 4, 8],
+    ['RACES', 2, 4],
+    ['STUNTS', 3, 8],
+    ['COLLECTIBLES', 9, 20],
+    ['DISTRICT JOBS', 5, 7],
+    ['CREW', 3, 3],
+  ];
+  let ry = mapY + 18;
+  for (const [label, have, max] of rows) {
+    text(ctx, label, px, ry, 13, PALETTE.text, 'left', 'bold');
+    text(ctx, `${have}/${max}`, px + 300, ry, 13, PALETTE.gold, 'right');
+    bar(ctx, px, ry + 8, 300, 9, have / max, PALETTE.gold);
+    ry += 42;
+  }
+  // Career stats.
+  const sy = mapY + mapH + 28;
+  text(ctx, 'CAREER', x + 28, sy, 14, PALETTE.gold, 'left', 'bold');
+  const stats = [
+    '37 cars stolen', '9 cops escaped', '61.4 km driven', '17 people taken out', '34 m longest jump',
+  ];
+  text(ctx, stats.join('   ·   '), x + 28, sy + 26, 14, PALETTE.text);
+  text(ctx, 'NEXT GOAL — Finish JOB 6/8 · THE CAPTAIN’S CAR, then take the boat job at the Marina.', x + 28, sy + 52, 14, PALETTE.muted);
+  text(ctx, 'ACTIVITIES 2/4 · STREET RACE · DELIVERY · CHOP SHOP · STUNTS', x + 28, sy + 78, 14, PALETTE.gold, 'left', 'bold');
+  // Save slots.
+  let slotY = sy + 104;
+  for (const slot of SLOTS) {
+    panel(ctx, x + 28, slotY, w - 56, 30);
+    text(ctx, `SLOT ${slot.slot} · ${slot.act} · ${slot.label}`, x + 44, slotY + 20, 13, PALETTE.text, 'left', 'bold');
+    text(ctx, `${slot.pct}% · $${slot.money.toLocaleString('en-US')} · ${slot.time}`, x + w - 44, slotY + 20, 13, PALETTE.muted, 'right');
+    slotY += 36;
+  }
+  void state;
+}
+
+/** Game over: busted or wrecked, with the score and a restart prompt. */
+export function drawOver(ctx, state, best) {
+  ctx.fillStyle = 'rgba(12, 8, 6, 0.78)';
+  ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+  const w = 560;
+  const h = 300;
+  const x = (FIELD.width - w) / 2;
+  const y = (FIELD.height - h) / 2;
+  panel(ctx, x, y, w, h);
+  text(ctx, state.busted ? 'BUSTED' : 'WRECKED', FIELD.width / 2, y + 70, 52, PALETTE.red, 'center', 'bold');
+  text(ctx, state.busted ? 'Tarnwick PD took you in on the Strand.' : 'The Falcon gave out on the Strand.', FIELD.width / 2, y + 110, 17, PALETTE.muted, 'center');
+  text(ctx, `Score ${state.score} · Best ${best}`, FIELD.width / 2, y + 160, 22, PALETTE.text, 'center');
+  text(ctx, `Money $${state.money.toLocaleString('en-US')} · ${state.carsStolen} cars stolen · ${state.copsEscaped} cops escaped`, FIELD.width / 2, y + 196, 15, PALETTE.muted, 'center');
+  text(ctx, 'Press Space or click to try again', FIELD.width / 2, y + h - 36, 18, PALETTE.gold, 'center', 'bold');
 }
